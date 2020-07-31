@@ -6,10 +6,9 @@ import options
 import deques, intsets, sets
 export tables, intsets
 
-import types/[htrie, hprimitives]
-import algo/[halgorithm, hseq_mapping, htree_mapping]
-import helpers
-import hpprint
+import hmisc/types/[htrie, hprimitives]
+import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
+import hmisc/[helpers, hpprint]
 
 type
   InfoException = ref object of CatchableError

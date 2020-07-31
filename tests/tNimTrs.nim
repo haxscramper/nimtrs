@@ -1,5 +1,6 @@
 import sugar, strutils, sequtils, strformat, sets, options
-import hmisc/[nim_trs, nim_trs_pprint, helpers]
+import hmisc/[helpers]
+import nimtrs/[trscore, trspprint]
 
 #===========================  implementation  ============================#
 

@@ -1,7 +1,8 @@
 ## Term algorithms
 
 import hashes, sequtils, tables, strformat, strutils
-import helpers, deques
+import deques
+import hmisc/helpers
 
 export tables
 

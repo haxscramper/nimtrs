@@ -1,4 +1,5 @@
-import hmisc/[nimast_trs, helpers, nim_trs_pprint]
+import hmisc/helpers
+import nimtrs/[trscore, trspprint]
 import sequtils, strformat, strutils
 import hmisc/algo/halgorithm
 import unittest, sets

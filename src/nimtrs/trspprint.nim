@@ -1,9 +1,8 @@
 import strutils, sequtils, strformat, sugar
 
-import types/[hterm_buf, seq2d, hdrawing]
-import helpers
-import nim_trs
-import hpprint
+import hmisc/types/[hterm_buf, seq2d, hdrawing]
+import hmisc/[helpers, hpprint]
+import trscore
 
 proc treeRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)

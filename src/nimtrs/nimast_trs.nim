@@ -1,8 +1,8 @@
 import macros, tables, strutils, sugar, sequtils
-import hmisc/[nim_trs, helpers]
+import hmisc/[helpers]
+import trscore, trspprint
 import hmisc/algo/[halgorithm, htree_mapping]
-export nim_trs, macros, halgorithm
-import nim_trs_pprint
+export macros, halgorithm
 
 type
   NodeTerm = Term[NimNode, NimNodeKind]

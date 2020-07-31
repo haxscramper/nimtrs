@@ -1,5 +1,5 @@
 import unittest
-import hmisc/[nim_trs]
+import nimtrs/trscore
 import hmisc/algo/[halgorithm, hseq_mapping]
 import strutils, sequtils, strformat, sugar, options, sets
 

@@ -1,4 +1,4 @@
-import hmisc/hterms
+import nimtrs/hterms
 
 type
   Arithm = Term[string, int]

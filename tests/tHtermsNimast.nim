@@ -1,4 +1,4 @@
-import hmisc/nimast_trs
+import nimtrs/nimast_trs
 
 import unittest
 
