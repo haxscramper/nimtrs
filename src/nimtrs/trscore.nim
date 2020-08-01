@@ -8,7 +8,7 @@ export tables, intsets
 
 import hmisc/types/[htrie, hprimitives]
 import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
-import hmisc/[helpers, hpprint]
+import hmisc/helpers
 
 type
   InfoException = ref object of CatchableError

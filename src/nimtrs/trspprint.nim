@@ -1,10 +1,13 @@
 import strutils, sequtils, strformat, sugar
 
-import hmisc/types/[hterm_buf, seq2d, hdrawing]
-import hmisc/[helpers, hpprint]
+import hmisc/types/seq2d
+import hmisc/helpers
+
+import hdrawing, hdrawing/term_buf
 import trscore
 
-proc treeRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F], depth: int = 0): string =
+proc treeRepr*[V, F](term: Term[V, F],
+                     cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)
   case getKind(term):
     of tkConstant:

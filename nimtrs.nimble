@@ -10,4 +10,5 @@ srcDir        = "src"
 
 # Dependencies
 
-requires "nim >= 1.2.4", "hmisc"
+requires "nim >= 1.2.4"
+requires "hmisc", "hdrawing"
