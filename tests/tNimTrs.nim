@@ -8,10 +8,11 @@ type
   TrmKind = enum
     tmkF
     tmkC
+    tmkL
 
   Trm = object
     case kind: TrmKind:
-      of tmkF:
+      of tmkF, tmkL:
         subt: seq[Trm]
       of tmkC:
         val: int
@@ -23,7 +24,7 @@ func `==`(lhs, rhs: Trm): bool =
     case lhs.kind:
       of tmkC:
         lhs.val == rhs.val
-      of tmkF:
+      of tmkF, tmkL:
         subnodesEq(lhs, rhs, subt)
   )
 
@@ -41,8 +42,11 @@ type
 func nOp(subt: varargs[TrmTerm]): TrmTerm =
   makeFunctor[Trm, TrmKind](tmkF, toSeq(subt))
 
-func nVar(n: string): TrmTerm =
-  makeVariable[Trm, TrmKind](n)
+func nList(elems: seq[TrmTerm]): TrmTerm =
+  makeList[Trm, TrmKind](elems)
+
+func nVar(n: string, isList: bool = false): TrmTerm =
+  makeVariable[Trm, TrmKind](n, isList)
 
 func nConst(n: Trm): TrmTerm =
   makeConstant(n, n.kind)
@@ -58,12 +62,14 @@ const trmImpl* = TermImpl[Trm, TrmKind](
   getSym: (proc(n: Trm): TrmKind = n.kind),
   isFunctorSym: (proc(kind: TrmKind): bool = kind == tmkF),
   makeFunctor: (proc(op: TrmKind, sub: seq[Trm]): Trm = nT(sub)),
+  makeList: (proc(sub: seq[Trm]): Trm = Trm(kind: tmkL, subt: sub)),
   getArguments: (proc(n: Trm): seq[Trm] = n.subt),
   valStrGen: (
     proc(n: Trm): string =
       case n.kind:
         of tmkF: $tmkF
         of tmkC: $n.val
+        of tmkL: "[" & n.subt.mapIt($it).join(", ") & "]"
   ),
 )
 
@@ -196,6 +202,47 @@ suite "Nim trs primitives":
 
        cmpTerm res["ii"], nConst(90)
        cmpTerm res["io"], nConst(8)
+
+  test "List unification test":
+    let res = unif(
+      nList(@[nConst(12), nConst(90)]),
+      nList(@[nVar("ii"), nVar("oo")])
+    ).get()
+
+    cmpTerm res["ii"], nConst(12)
+    cmpTerm res["oo"], nConst(90)
+
+  test "Patter unification test":
+    block:
+      let res = unif(
+        # Input list is `[12, 22]`
+        nList(@[nConst(12), nConst(22)]),
+        # Pattern is `@a` - variable can be unified with multiple
+        # elements at once.
+        makePattern(makeTermP(makeVariable[Trm, TrmKind](
+          name = "e",
+          isList = true # 'List' variable
+        )), false # Match is not full (try to match until the end)
+        )
+      ).get()
+
+      echo res["e"].exprRepr()
+      cmpTerm res["e"], # Environment contains variable `e` matched with
+                        # list `[12, 22]`
+          nList(@[nConst 12, nConst 22])
+
+    block:
+      let res = unif(
+        # Input list is `[1, 1]`
+        nList(@[nconst 1, nconst 1]),
+        makePattern(makeTermP(nVar(
+          "ii",
+          false
+        )), false)
+      ).get()
+
+      echo res["ii"].exprRepr()
+      cmpTerm res["ii"], nConst(1)
 
   test "Pretty-printing":
     echo makeSystem({

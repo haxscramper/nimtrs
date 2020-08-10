@@ -33,6 +33,7 @@ func getIt[T](it: SingleIt[T]): T = it.it[0]
 func setIt[T](it: var SingleIt[T], val: T): void = (it.it[0] = val)
 func getIt[T](it: var SingleIt[T]): var T = it.it[0]
 func mkIt[T](it: T): SingleIt[T] = SingleIt[T](it: @[it])
+converter toT[T](it: SingleIt[T]): T = it.it[0]
 
 type
 
@@ -89,6 +90,9 @@ type
           of true:
             idx: int
           of false:
+            isList: bool ## Variable is bound to list? (contains
+            ## multiple values)
+
             name: VarSym
       of tkList:
         elements: seq[Term[V, F]]
@@ -137,6 +141,7 @@ Example for `NimNode` and `NimNodeKind`
     getArguments*: proc(val: V): seq[V]
     getSym*: proc(val: V): F
     makeFunctor*: proc(sym: F, subt: seq[V]): V
+    makeList*: proc(subt: seq[V]): V
     valStrGen*: proc(val: V): string ## Conver value to string.
 
   TermEnv*[V, F] = object
@@ -249,8 +254,8 @@ func makePlaceholder*[V, F](): Term[V, F] =
 func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
   Term[V, F](tkind: tkConstant, value: val, csym: csym)
 
-func makeVariable*[V, F](name: VarSym): Term[V, F] =
-  Term[V, F](tkind: tkVariable, name: name, isIdx: false)
+func makeVariable*[V, F](name: VarSym, isList: bool = false): Term[V, F] =
+  Term[V, F](tkind: tkVariable, name: name, isIdx: false, isList: isList)
 
 func makeVariable*[V, F](idx: int): Term[V, F] =
   Term[V, F](tkind: tkVariable, idx: idx, isIdx: true)
@@ -263,6 +268,33 @@ func makeFunctor*[V, F](
   Term[V, F](tkind: tkFunctor,
              functor: sym,
              arguments: makeList(subt).mkIt())
+
+func makePattern*[V, F](patt: TermPattern[V, F],
+                        fullMatch: bool): Term[V, F] =
+  Term[V, F](pattern: patt,
+             tkind: tkPattern,
+             fullmatch: fullmatch)
+
+#===========================  Making patterns  ===========================#
+
+
+func makeAndP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkConcat, patterns: patts)
+
+func makeOrP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkAlternative, patterns: patts)
+
+func makeOptP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt))
+
+func makeZeroOrMoreP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt))
+
+func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkNegation, patt: mkIt(patt))
+
+func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
 
 #======================  accessing term internals  =======================#
 
@@ -313,6 +345,10 @@ func getElements*[V, F](t: Term[V, F]): seq[Term[V, F]] =
   assert t.getKind() == tkList
   t.elements
 
+func addElement*[V, F](t: var Term[V, F], elem: Term[V, F]): void =
+  assert t.getkind == tkList
+  t.elements.add elem
+
 func setSubt*[V, F](
   t: var Term[V, F], subt: seq[Term[V, F]]): void =
   assert t.getKind() == tkFunctor
@@ -340,7 +376,7 @@ proc toTerm*[V, F](val: V, cb: TermImpl[V, F]): Term[V, F] =
 
 proc fromTerm*[V, F](
   term: Term[V, F], cb: TermImpl[V, F], path: TreePath = @[0]): V =
-  if term.getKind() notin {tkFunctor, tkConstant}:
+  if term.getKind() notin {tkFunctor, tkConstant, tkList}:
     raiseGenEx(
       "Cannot convert under-substituted term back to tree. " &
       $term.getKind() & " has to be replaced with value",
@@ -359,6 +395,10 @@ proc fromTerm*[V, F](
     result = cb.makeFunctor(
       term.getFSym(),
       term.getArguments().mapPairs(rhs.fromTerm(cb, path & @[lhs])))
+  elif term.getKind() == tkList:
+    let elems: seq[V] = term.getElements().mapPairs(
+      rhs.fromTerm(cb, path & @[lhs]))
+    result = cb.makeList(elems)
   else:
     result = term.getValue()
 
@@ -530,6 +570,14 @@ func `[]`*[V, F](e: TermEnv[V, F], t: VarSym): Term[V, F] =
       KeyError,
       &"Missing variable `{t}` in environment. Have vars: {vars}")
 
+
+func `[]`*[V, F](e: var TermEnv[V, F], t: VarSym): var Term[V, F] =
+  e.values[t]
+
+func `[]`*[V, F](e: var TermEnv[V, F], t: Term[V, F]): var Term[V, F] =
+  e.values[t.name]
+
+
 func `[]=`*[V, F](system: var RedSystem[V, F], lhs, rhs: Term[V, F]): void =
   ## Add rule to environment
   system.rules[lhs] = rhs
@@ -537,6 +585,12 @@ func `[]=`*[V, F](system: var RedSystem[V, F], lhs, rhs: Term[V, F]): void =
 func `[]=`*[V, F](env: var TermEnv[V, F], variable: VarSym, value: Term[V, F]): void =
   ## Set value for variable in environemt
   env.values[variable] = value
+
+
+func `[]=`*[V, F](env: var TermEnv[V, F],
+                  variable, value: Term[V, F]): void =
+  ## Set value for variable in environemt
+  env.values[variable.name] = value
 
 
 func `==`*[V, F](lhs, rhs: Term[V, F]): bool =
@@ -572,6 +626,10 @@ iterator pairs*[V, F](env: TermEnv[V, F]): (VarSym, Term[V, F]) =
 
 func contains*[V, F](env: TermEnv[V, F], vsym: VarSym): bool =
   vsym in env.values
+
+func contains*[V, F](env: TermEnv[V, F], term: Term[V, F]): bool =
+  assert term.getkind == tkVariable
+  term.name in env.values
 
 func hasAll*[V, F](env: TermEnv[V, F], varlist: VarSet): bool =
   result = true
@@ -660,11 +718,74 @@ func dereference*[V, F](
 
     result = value
 
+func derefOrDefault*[V, F](
+  term: Term[V, F], env: TermEnv[V, F], default: Term[V, F]): Term[V, F] =
+  if term in env:
+    return dereference(term,  env)
+  else:
+    default
+
+
+func unif*[V, F](
+  t1, t2: Term[V, F],
+  env: TermEnv[V, F] = makeEnvironment[V, F]()): Option[TermEnv[V, F]]
+
+func partialMatch[V, F](
+  elems: seq[Term[V, F]],
+  patt: TermPattern[V, F],
+  env: TermEnv[V, F] = makeEnvironment[V, F]()
+     ): tuple[env: Option[TermEnv[V, F]], endpos: int] =
+
+  var env = env
+  var idx: int = 0
+  # debugecho patt
+  while idx < elems.len:
+    case patt.kind:
+      of tpkTerm:
+        let term = patt.term.getIt()
+        case getKind(term):
+          of tkVariable:
+            # debugecho term
+            if term.isList:
+              # debugecho &"Item [{idx}] matches"
+              if term notin env:
+                env[term] = makeList(@[elems[idx]])
+              else:
+                env[term].addElement elems[idx]
+
+              inc idx
+              # var val = term.derefOrDefault(env, makeList[V, F](@[]))
+              # debugecho "val: ", val
+            else:
+              if term in env:
+                # debugecho term.name, idx
+                # debugecho env[term]
+                # debugecho elems[idx]
+                let res = unif(env[term], elems[idx])
+                if res.isSome():
+                  inc idx
+                else:
+                  raiseAssert("#[ IMPLEMENT ]#")
+              else:
+                env[term] = elems[idx]
+                inc idx
+          else:
+            raiseAssert("#[ IMPLEMENT ]#")
+      else:
+        raiseAssert("#[ IMPLEMENT ]#")
+
+  # debugecho env
+  return (some(env), idx)
+
 func unif*[V, F](elems: seq[Term[V, F]],
                  patt: TermPattern[V, F],
                  env: TermEnv[V, F] = makeEnvironment[V, F](),
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
-  raiseAssert("#[ IMPLEMENT ]#")
+  if fullMatch:
+    raiseAssert("#[ IMPLEMENT ]#")
+  else:
+    let (env, endpos) = partialMatch(elems, patt, env)
+    return env
 
 func unif*[V, F](
   t1, t2: Term[V, F],
@@ -693,6 +814,10 @@ func unif*[V, F](
     assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
     assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
     if (k1, k2) == (tkList, tkList): # list-list unification
+      if val1.getElements().len != val2.getElements().len:
+        # debugecho "DIfferent list len"
+        return none(TermEnv[V, F])
+
       var tmpRes = env
       for idx, (el1, el2) in zip(getElements(val1), getElements(val2)):
         let res = unif(el1, el2, tmpRes)
@@ -701,6 +826,7 @@ func unif*[V, F](
         else:
           return none(TermEnv[V, F])
 
+      return some(tmpRes)
     else: # list-pattern unfification
       if k1 == tkList: # k2 is pattern
         return val1.getElements().unif(val2.pattern, env, val2.fullMatch)
@@ -739,6 +865,9 @@ iterator redexes*[V, F](
 
     yield (red: nowTerm, path: path)
 
+func replaceAll*[V, F](
+  terms: seq[Term[V, F]], patt: TermPattern[V, F]): seq[Term[V, F]] =
+  discard
 
 proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): void =
   case getKind(term):
