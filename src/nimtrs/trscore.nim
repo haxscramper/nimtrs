@@ -85,7 +85,11 @@ type
         csym: F
         value: V
       of tkVariable:
-        name: VarSym
+        case isIdx: bool
+          of true:
+            idx: int
+          of false:
+            name: VarSym
       of tkList:
         elements: seq[Term[V, F]]
       of tkPattern:
@@ -246,7 +250,10 @@ func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
   Term[V, F](tkind: tkConstant, value: val, csym: csym)
 
 func makeVariable*[V, F](name: VarSym): Term[V, F] =
-  Term[V, F](tkind: tkVariable, name: name)
+  Term[V, F](tkind: tkVariable, name: name, isIdx: false)
+
+func makeVariable*[V, F](idx: int): Term[V, F] =
+  Term[V, F](tkind: tkVariable, idx: idx, isIdx: true)
 
 func makeList*[V, F](elements: seq[Term[V, F]]): Term[V, F] =
   Term[V, F](tkind: tkList, elements: elements)
