@@ -660,6 +660,12 @@ func dereference*[V, F](
 
     result = value
 
+func unif*[V, F](elems: seq[Term[V, F]],
+                 patt: TermPattern[V, F],
+                 env: TermEnv[V, F] = makeEnvironment[V, F](),
+                 fullMatch: bool = true): Option[TermEnv[V, F]] =
+  raiseAssert("#[ IMPLEMENT ]#")
+
 func unif*[V, F](
   t1, t2: Term[V, F],
   env: TermEnv[V, F] = makeEnvironment[V, F]()): Option[TermEnv[V, F]] =
@@ -683,6 +689,24 @@ func unif*[V, F](
     return some(bindTerm(val2, val1, env))
   elif (k1, k2) in @[(tkConstant, tkFunctor), (tkFunctor, tkConstant)]:
     return none(TermEnv[V, F])
+  elif k1 in {tkList, tkPattern}:
+    assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
+    assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
+    if (k1, k2) == (tkList, tkList): # list-list unification
+      var tmpRes = env
+      for idx, (el1, el2) in zip(getElements(val1), getElements(val2)):
+        let res = unif(el1, el2, tmpRes)
+        if res.isSome():
+          tmpRes = res.get()
+        else:
+          return none(TermEnv[V, F])
+
+    else: # list-pattern unfification
+      if k1 == tkList: # k2 is pattern
+        return val1.getElements().unif(val2.pattern, env, val2.fullMatch)
+      else: # k1 is pattern
+        return val2.getElements().unif(val1.pattern, env, val1.fullMatch)
+      # for elem in t1.
   else:
     var tmpRes = env
     if getFSym(val1) != getFSym(val2):
