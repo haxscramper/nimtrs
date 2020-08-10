@@ -26,7 +26,7 @@ const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
       if sub.len == 0: newNimNode(op)
       else: newTree(op, sub)
   ),
-  getSubt: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
+  getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
   valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
 )
 

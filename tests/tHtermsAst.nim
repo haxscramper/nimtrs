@@ -66,7 +66,7 @@ suite "Hterms ast rewriting":
         proc(op: AstKind, sub: seq[Ast]): Ast =
           result = Ast(kind: op); result.sons = sub
       ),
-      getSubt: (proc(n: Ast): seq[Ast] = n.sons),
+      getArguments: (proc(n: Ast): seq[Ast] = n.sons),
       # setSubt: (proc(n: var Ast, sub: seq[Ast]) = n.sons = sub),
       valStrGen: (proc(n: Ast): string = "[[ TODO ]]"),
     )

@@ -20,15 +20,20 @@ proc treeRepr*[V, F](term: Term[V, F],
     of tkFunctor:
       return (
         @[ ind & "fun " & $(getFSym(term)) ] &
-        getSubt(term).mapIt(treeRepr(it, cb, depth + 1))
+        getArguments(term).mapIt(treeRepr(it, cb, depth + 1))
       ).join("\n")
+    of tkList:
+      return (@[ ind & "lst"] & getElements(term).mapIt(
+        treeRepr(it, cb, depth + 1))).join("\n")
+    of tkPattern:
+      &"{ind} <<<PATTERN TREE REPR>>>"
 
 proc treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)
   if cb.isFunctor(val):
     return (
       @[ ind & "fun " & $(cb.getSym(val)) ] &
-      cb.getSubt(val).mapIt(treeRepr(it, cb, depth + 1))
+      cb.getArguments(val).mapIt(treeRepr(it, cb, depth + 1))
     ).join("\n")
   else:
     return cb.valStrGen(val)
@@ -43,9 +48,9 @@ proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
       "_" & $term.getVName()
     of tkFunctor:
       if ($getSym(term)).validIdentifier():
-        $getSym(term) & "(" & term.getSubt().mapIt(it.exprRepr(cb)).join(", ") & ")"
+        $getSym(term) & "(" & term.getArguments().mapIt(it.exprRepr(cb)).join(", ") & ")"
       else:
-        let subt = term.getSubt()
+        let subt = term.getArguments()
         case subt.len():
           of 1: &"{term.getSym()}({subt[0]})"
           of 2: &"{subt[0]} {term.getSym()} {subt[1]}"

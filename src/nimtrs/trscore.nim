@@ -26,11 +26,41 @@ proc raiseGenEx[T](msg: string, info: T): void =
 template getGEx*[T](): untyped = cast[GenException[T]](getCurrentException())
 
 type
+  SingleIt[T] = object
+    it: seq[T]
+
+func getIt[T](it: SingleIt[T]): T = it.it[0]
+func setIt[T](it: var SingleIt[T], val: T): void = (it.it[0] = val)
+func getIt[T](it: var SingleIt[T]): var T = it.it[0]
+func mkIt[T](it: T): SingleIt[T] = SingleIt[T](it: @[it])
+
+type
+
+  TermPatternKind* = enum
+    tpkZeroOrMore
+    tpkAlternative
+    tpkNegation
+    tpkConcat
+    tpkOptional
+    tpkTerm
+
+  TermPattern*[V, F] = object
+    case kind*: TermPatternKind
+      of tpkZeroOrMore, tpkOptional, tpkNegation:
+        patt*: SingleIt[TermPattern[V, F]]
+      of tpkConcat, tpkAlternative:
+        patterns*: seq[TermPattern[V, F]]
+      of tpkTerm:
+        term*: SingleIt[Term[V, F]]
+
+
   TermKind* = enum
     tkVariable
     tkFunctor
     tkConstant
     tkPlaceholder
+    tkList
+    tkPattern
 
   VarSym* = string
   VarSet* = HashSet[VarSym]
@@ -49,12 +79,18 @@ type
     case tkind*: TermKind
       of tkFunctor:
         functor: F
-        subterms: seq[Term[V, F]]
+        arguments: SingleIt[Term[V, F]]
+        # subterms: seq[Term[V, F]]
       of tkConstant:
         csym: F
         value: V
       of tkVariable:
         name: VarSym
+      of tkList:
+        elements: seq[Term[V, F]]
+      of tkPattern:
+        fullMatch: bool
+        pattern: TermPattern[V, F]
       of tkPlaceholder:
         nil
 
@@ -88,13 +124,13 @@ Example for `NimNode` and `NimNodeKind`
           if sub.len == 0: newNimNode(op)
           else: newTree(op, sub)
       ),
-      getSubt: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
+      getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
       valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
     )
 
     ]##
     isFunctorSym*: proc(val: F): bool
-    getSubt*: proc(val: V): seq[V]
+    getArguments*: proc(val: V): seq[V]
     getSym*: proc(val: V): F
     makeFunctor*: proc(sym: F, subt: seq[V]): V
     valStrGen*: proc(val: V): string ## Conver value to string.
@@ -212,9 +248,14 @@ func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
 func makeVariable*[V, F](name: VarSym): Term[V, F] =
   Term[V, F](tkind: tkVariable, name: name)
 
+func makeList*[V, F](elements: seq[Term[V, F]]): Term[V, F] =
+  Term[V, F](tkind: tkList, elements: elements)
+
 func makeFunctor*[V, F](
   sym: F, subt: seq[Term[V, F]]): Term[V, F] =
-  Term[V, F](tkind: tkFunctor, functor: sym, subterms: subt)
+  Term[V, F](tkind: tkFunctor,
+             functor: sym,
+             arguments: makeList(subt).mkIt())
 
 #======================  accessing term internals  =======================#
 
@@ -243,14 +284,27 @@ func getNth*[V, F](
   t.subterms[idx]
 
 func getNthMod*[V, F](
-  t: var Term[V, F], idx: int): var Term[V, F]=
-  assert t.getKind() == tkFunctor
-  t.subterms[idx]
+  t: var Term[V, F], idx: int): var Term[V, F] =
+  ## Get mutable value of [`idx`] element in list or functor arguments
+  let k = t.getKind()
+  assert k in {tkFunctor, tkList}
+  if k == tkList:
+    return t.elements[idx]
+  else:
+    return t.arguments.getIt().elements[idx]
 
-func getSubt*[V, F](
+func getArguments*[V, F](
   t: Term[V, F]): seq[Term[V, F]] =
   assert t.getKind() == tkFunctor
-  t.subterms
+  t.arguments.getIt().elements
+
+func getArgumentList*[V, F](t: Term[V, F]): Term[V, F] =
+  assert t.getKind() == tkList
+  t.arguments.getIt()
+
+func getElements*[V, F](t: Term[V, F]): seq[Term[V, F]] =
+  assert t.getKind() == tkList
+  t.elements
 
 func setSubt*[V, F](
   t: var Term[V, F], subt: seq[Term[V, F]]): void =
@@ -273,7 +327,7 @@ proc isFunctor*[V, F](cb: TermImpl[V, F], val: V): bool =
 
 proc toTerm*[V, F](val: V, cb: TermImpl[V, F]): Term[V, F] =
   if cb.isFunctor(val):
-    return makeFunctor[V, F](cb.getSym(val), cb.getSubt(val).mapIt(it.toTerm(cb)))
+    return makeFunctor[V, F](cb.getSym(val), cb.getArguments(val).mapIt(it.toTerm(cb)))
   else:
     return makeConstant[V, F](val, cb.getSym(val))
 
@@ -297,7 +351,7 @@ proc fromTerm*[V, F](
   if term.getKind() == tkFunctor:
     result = cb.makeFunctor(
       term.getFSym(),
-      term.getSubt().mapPairs(rhs.fromTerm(cb, path & @[lhs])))
+      term.getArguments().mapPairs(rhs.fromTerm(cb, path & @[lhs])))
   else:
     result = term.getValue()
 
@@ -323,7 +377,8 @@ func makeRulePair*[V, F](
   result.matchers = makeMatcherList(rules)
 
 
-func varlist*[V, F](term: Term[V, F], path: TreePath = @[0]): seq[(Term[V, F], TreePath)] =
+func varlist*[V, F](term: Term[V, F],
+                    path: TreePath = @[0]): seq[(Term[V, F], TreePath)] =
   ## Output list of all variables in term
   case getKind(term):
     of tkConstant, tkPlaceholder:
@@ -331,8 +386,15 @@ func varlist*[V, F](term: Term[V, F], path: TreePath = @[0]): seq[(Term[V, F], T
     of tkVariable:
       return @[(term, path)]
     of tkFunctor:
-      for idx, sub in getSubt(term):
+      for idx, sub in getArguments(term):
         result &= sub.varlist(path & @[idx])
+    of tkList:
+      for idx, sub in getElements(term):
+        result &= sub.varlist(path & @[idx])
+
+    of tkPattern:
+      raiseAssert("#[ IMPLEMENT ]#")
+
 
 func makeMatcher*[V, F](matcher: MatchProc[V, F]): TermMatcher[V, F] =
   ## Create term matcher instance for matching procs
@@ -475,8 +537,14 @@ func `==`*[V, F](lhs, rhs: Term[V, F]): bool =
     case lhs.tkind:
       of tkConstant: lhs.value == rhs.value
       of tkVariable: lhs.name == rhs.name
-      of tkFunctor: lhs.functor == rhs.functor and subnodesEq(lhs, rhs, subterms)
+      of tkFunctor:
+        lhs.functor == rhs.functor and
+        lhs.arguments.getIt() == rhs.arguments.getIt()
       of tkPlaceholder: true
+      of tkList:
+         subnodesEq(lhs, rhs, elements)
+      of tkPattern:
+        raiseAssert(msgjoin("Cannot compare patterns for equality"))
   )
 
 iterator items*[V, F](system: RedSystem[V, F]): RulePair[V, F] =
@@ -537,24 +605,34 @@ func copy*[V, F](term: Term[V, F], env: TermEnv[V, F]): (Term[V, F], TermEnv[V, 
       else:
         return (deref, inputEnv)
 
-    of tkFunctor:
-      var resEnv = env
-      var subterms: seq[Term[V, F]]
-      for arg in getSubt(term):
+    of tkFunctor, tkList:
+      let islist = (getKind(term) == tkList)
+
+      var
+        resEnv = env
+        subterms: seq[Term[V, F]]
+
+      for arg in islist.tern(getArguments(term), getElements(term)):
         let (tmpArg, tmpEnv) = arg.copy(resEnv)
         resEnv = tmpEnv
         subterms.add tmpArg
 
-      return (makeFunctor(getFSym(term), subterms), resEnv)
+      if islist:
+        return (makeList(subterms), resEnv)
+      else:
+        return (makeFunctor(getFSym(term), subterms), resEnv)
 
     of tkPlaceholder:
       return (term, inputEnv)
+    of tkPattern:
+      raiseAssert("#[ IMPLEMENT ]#")
+
 
 func bindTerm[V, F](variable, value: Term[V, F], env: TermEnv[V, F]): TermEnv[V, F] =
   ## Create environment where `variable` is bound to `value`
   result = env
   case getKind(value):
-    of tkConstant, tkVariable, tkPlaceholder:
+    of tkConstant, tkVariable, tkPlaceholder, tkList, tkPattern:
       result[getVName(variable)] = value
     of tkFunctor:
       let (newTerm, newEnv) = value.copy(env)
@@ -603,12 +681,12 @@ func unif*[V, F](
     if getFSym(val1) != getFSym(val2):
       return none(TermEnv[V, F])
 
-    if getSubt(val1).len != getSubt(val2).len:
+    if getArguments(val1).len != getArguments(val2).len:
       # TEST with different-sized term unification
       # TODO provide `reason` for failure
       return none(TermEnv[V, F])
 
-    for idx, (arg1, arg2) in zip(getSubt(val1), getSubt(val2)):
+    for idx, (arg1, arg2) in zip(getArguments(val1), getArguments(val2)):
       let res = unif(arg1, arg2, tmpRes)
       if res.isSome():
         tmpRes = res.get()
@@ -625,7 +703,7 @@ iterator redexes*[V, F](
   while que.len > 0:
     let (nowTerm, path) = que.popFirst()
     if getKind(nowTerm) == tkFunctor:
-      for idx, subTerm in getSubt(nowTerm):
+      for idx, subTerm in getArguments(nowTerm):
         que.addLast((subTerm, path & @[idx]))
 
     yield (red: nowTerm, path: path)
@@ -764,7 +842,7 @@ template reductionTriggersBFS*[V, F](
   redex: Term[V, F], system: RedSystem[V, F], body: untyped): untyped =
 
   var rs = ReductionState()
-  iterateItBFS(redex, it.getSubt(), it.getKind() == tkFunctor):
+  iterateItBFS(redex, it.getArguments(), it.getKind() == tkFunctor):
     let rule = system.findApplicable(it, rs, emptyTreePath)
     if rule.isSome():
       let (ruleId {.inject.}, env {.inject.}, rulePair {.inject.}) = rule.get()
@@ -776,7 +854,7 @@ template reductionTriggersDFS*[V, F](
   redex: Term[V, F], system: RedSystem[V, F], body: untyped): untyped =
 
   var rs = ReductionState()
-  iterateItDFS(redex, it.getSubt(), it.getKind() == tkFunctor):
+  iterateItDFS(redex, it.getArguments(), it.getKind() == tkFunctor):
     let rule = system.findApplicable(it, rs, emptyTreePath)
     if rule.isSome():
       let (ruleId {.inject.}, env {.inject.}, rulePair {.inject.}) = rule.get()
