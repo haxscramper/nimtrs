@@ -711,7 +711,7 @@ iterator redexes*[V, F](
 
 proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): void =
   case getKind(term):
-    of tkFunctor:
+    of tkFunctor, tkList:
       if path.len == 1:
         term = value
       else:
@@ -719,6 +719,8 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
           term = getNthMod(term, path[1]),
           path = path[1 .. ^1],
           value = value)
+    of tkPattern:
+      raiseAssert("Cannot set value at path *inside* pattern")
     of tkVariable:
       term = value
     of tkPlaceholder:

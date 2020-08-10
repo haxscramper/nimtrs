@@ -58,7 +58,7 @@ const trmImpl* = TermImpl[Trm, TrmKind](
   getSym: (proc(n: Trm): TrmKind = n.kind),
   isFunctorSym: (proc(kind: TrmKind): bool = kind == tmkF),
   makeFunctor: (proc(op: TrmKind, sub: seq[Trm]): Trm = nT(sub)),
-  getSubt: (proc(n: Trm): seq[Trm] = n.subt),
+  getArguments: (proc(n: Trm): seq[Trm] = n.subt),
   valStrGen: (
     proc(n: Trm): string =
       case n.kind:
