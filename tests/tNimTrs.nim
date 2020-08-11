@@ -49,6 +49,9 @@ func nList(elems: seq[TrmTerm]): TrmTerm =
 func nVar(n: string, isList: bool = false): TrmTerm =
   makeVariable[Trm, TrmKind](n, isList)
 
+
+func nPlaceholder(): TrmTerm = makePlaceholder[Trm, TrmKind]()
+
 func nConst(n: Trm): TrmTerm =
   makeConstant(n, n.kind)
 
@@ -331,6 +334,33 @@ suite "Pattern matching":
       {
         "e" : nConst(1),
         "z" : nConst(2)
+      }
+    )
+
+  test "Zero-or-more pattern":
+    unifTest(
+      @[1, 2, 3, 4, 5],
+      # `*(@e & @z)` any number of item /pairs/. Move even items in
+      # list `@e` and odd ones into `@z`
+      (makeZeroOrMoreP(makeAndP(@[
+        makeTermP nVar("e", true),
+        makeTermP nVar("z", true)
+      ])), false),
+      {
+        "e" : nList(@[nConst 1, nConst 3]),
+        "z" : nList(@[nconst 2, nconst 4])
+      }
+    )
+
+  test "Optional":
+    unifTest(
+      @[1, 2, 3, 4],
+      (makeAndP(@[
+        makeTermP nVar("l", true),
+        makeOptP makeTermP(nConst 2),
+      ]), false),
+      {
+        "l" : nList(@[nconst 1, nconst 3, nconst 4])
       }
     )
 

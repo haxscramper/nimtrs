@@ -742,13 +742,25 @@ func partialMatch[V, F](
   ## return match end position + updated environment. If match is
   ## unsuccesful return `startpos` and `none` env, otherwise return
   ## position of the first item *not matched* by pattern.
+  # IDEA return more complicated data structure for each match. It
+  # might be possible to create something similar to regex101.com
+  # where I can see submatches.
 
-  # mixin exprRepr
   var pos = startpos
+  let baseenv = env
   var env = env
-  # var pos: int = 0
   let noRes = (none(TermEnv[V, F]), startpos)
-  # echov elems
+
+  if pos == elems.len: # Immediately return unification on past-the-end
+                       # elements
+    if patt.kind in {tpkOptional, tpkZeroOrMore}: # E* and E? can
+      # match zero elements, unification succedes regardless of
+      # start position
+      return (some(env), startpos)
+    else:
+      return noRes
+
+
   case patt.kind:
     of tpkTerm:
       let term = patt.term.getIt()
@@ -772,6 +784,16 @@ func partialMatch[V, F](
             else:
               env[term] = elems[pos]
               inc pos
+        of tkPlaceholder:
+          inc pos
+        of tkConstant:
+          let res = unif(term, elems[pos])
+          if res.isSome():
+            # env = res.get()
+            # echov env.exprRepr()
+            inc pos
+          else:
+            return noRes
         else:
           raiseAssert("#[ IMPLEMENT ]#")
     of tpkConcat:
@@ -781,16 +803,35 @@ func partialMatch[V, F](
         if resenv.isSome():
           env = resenv.get()
           pos = endpos
+          # echov pos, env.exprRepr()
         else:
           return noRes
 
-        pos = endpos
-
+      # echov pos, "Result env: ", env.exprRepr()
       return (some(env), pos)
+    of tpkZeroOrMore:
+      while true:
+        let (resenv, endpos) = partialMatch(
+          elems, pos, patt.patt.getIt(), env)
+
+        if resenv.isSome():
+          env = resenv.get()
+          pos = endpos
+          # echov pos, env.exprRepr()
+        else: # 0+ - always succeds in unification, possibly not
+              # producing any shift
+          break
+    of tpkOptional:
+      let (resenv, endpos) = partialMatch(
+        elems, pos, patt.patt.getIt(), env)
+
+      if resenv.isSome():
+        env = resenv.get()
+        pos = endpos
     else:
       raiseAssert("#[ IMPLEMENT ]#")
 
-  # echov pos, "Result position"
+  # echov patt.exprRepr(), ":: ", baseenv.exprRepr(), " --> ", env.exprRepr()
   return (some(env), pos)
 
 func unif*[V, F](elems: seq[Term[V, F]],
@@ -810,10 +851,15 @@ func unif*[V, F](elems: seq[Term[V, F]],
     while pos < elems.len:
       # NOTE for now I will assum passing sublist is really cheap. If
       # not - will use linked list or something like that.
+      # echov pos
       let (resenv, endpos) = partialMatch(elems, pos, patt, env)
       if resenv.isSome():
+        # echov resenv.get().exprRepr()
+        if endpos == pos: # null match - return immediately (next
+                          # matches will yield the same result)
+          return resenv
+
         env = resenv.get()
-        # echov pos, env.exprRepr()
         pos = endpos
       else:
         if endpos == 0:
