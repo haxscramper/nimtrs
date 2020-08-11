@@ -6,14 +6,14 @@ import hmisc/helpers
 import hdrawing, hdrawing/term_buf
 import trscore
 
-proc exprRepr*(vs: VarSym): string =
-  # if vs.listidxp:
-  #   "#" & $vs.idx
-  # else:
-  if vs.listvarp:
-    "@" & $vs.getVName()
-  else:
-    "_" & $vs.getVName()
+# proc exprRepr*(vs: VarSym): string =
+#   # if vs.listidxp:
+#   #   "#" & $vs.idx
+#   # else:
+#   if vs.listvarp:
+#     "@" & $vs.getVName()
+#   else:
+#     "_" & $vs.getVName()
 
 proc treeRepr*[V, F](term: Term[V, F],
                      cb: TermImpl[V, F], depth: int = 0): string =

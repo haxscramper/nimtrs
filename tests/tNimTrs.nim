@@ -127,7 +127,7 @@ proc cmpTerm(term: TrmTerm | Trm, val: Trm | TrmTerm): void =
     echo treeRepr(term)
     echo "Expected:"
     echo treeRepr(val)
-    fail()
+    raiseAssert("Fail")
 
 suite "Nim trs primitives":
   test "To-from term convesion":
@@ -300,6 +300,8 @@ suite "Pattern matching":
 
       echo res["ii"].exprRepr()
       cmpTerm res["ii"], nConst(1)
+
+  # if true: quit 0
 
   test "Test proc test":
     unifTest(

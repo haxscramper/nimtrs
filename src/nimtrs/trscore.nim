@@ -318,6 +318,13 @@ func `==`*(l: VarSym, str: string): bool =
 func listvarp*(vs: VarSym): bool = vs.isList
 func getVName*(vs: VarSym): string = vs.name
 
+
+proc exprRepr*(vs: VarSym): string =
+  if vs.listvarp:
+    "@" & vs.name
+  else:
+    "_" & vs.name
+
 func listvarp*[V, F](t: Term[V, F]): bool = t.name.listvarp()
 
 func getKind*[V, F](t: Term[V, F]): TermKind =
@@ -834,36 +841,21 @@ func partialMatch[V, F](
       return noRes
 
 
+  mixin exprRepr
   case patt.kind:
     of tpkTerm:
       let term = patt.term.getIt()
       case getKind(term):
         of tkVariable:
-          if term.listvarp():
-            if term notin env:
-              env[term] = makeList(@[elems[pos]])
-            else:
-              env[term].addElement elems[pos]
-
+          if env.appendOrUnif(term.name, elems[pos]):
             inc pos
-            # dechofmt "matched variable {term.name} next idx: {pos}"
           else:
-            if term in env:
-              let res = unif(env[term], elems[pos])
-              if res.isSome():
-                inc pos
-              else:
-                return noRes
-            else:
-              env[term] = elems[pos]
-              inc pos
+            return noRes
         of tkPlaceholder:
           inc pos
         of tkConstant:
           let res = unif(term, elems[pos])
           if res.isSome():
-            # env = res.get()
-            # echov env.exprRepr()
             inc pos
           else:
             return noRes
@@ -876,11 +868,9 @@ func partialMatch[V, F](
         if resenv.isSome():
           env = resenv.get()
           pos = endpos
-          # echov pos, env.exprRepr()
         else:
           return noRes
 
-      # echov pos, "Result env: ", env.exprRepr()
       return (some(env), pos)
     of tpkZeroOrMore:
       while true:
@@ -890,7 +880,6 @@ func partialMatch[V, F](
         if resenv.isSome():
           env = resenv.get()
           pos = endpos
-          # echov pos, env.exprRepr()
         else: # 0+ - always succeds in unification, possibly not
               # producing any shift
           break
@@ -904,7 +893,6 @@ func partialMatch[V, F](
     else:
       raiseAssert("#[ IMPLEMENT ]#")
 
-  # echov patt.exprRepr(), ":: ", baseenv.exprRepr(), " --> ", env.exprRepr()
   return (some(env), pos)
 
 func unif*[V, F](elems: seq[Term[V, F]],
@@ -1055,6 +1043,22 @@ func mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =
   for vsym, value in other:
     if vsym notin env:
       env[vsym] = value
+
+func appendOrUnif*[V, F](env: var TermEnv[V, F],
+                         vsym: VarSym, value: Term[V, F]): bool =
+  if vsym in env:
+    if vsym.isList:
+      env[vsym].addElement value
+      return true
+    else:
+      return unif(env[vsym], value).isSome()
+  else:
+    if vsym.isList:
+      env[vsym] = makeList(@[value])
+      return true
+    else:
+      env[vsym] = value
+      return true
 
 func match*[V, F](
   redex: Term[V, F],
