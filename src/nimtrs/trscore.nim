@@ -1044,24 +1044,23 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
       term = value
       # assert false, "Cannot assign to constant: " & $term & " = " & $value
 
-proc substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
+func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
   ## Substitute all variables in term with their values from environment
   result = term
   for (v, path) in term.varlist():
     if env.isBound(getVName(v)):
       result.setAtPath(path, v.dereference(env))
 
-
-proc mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =
+func mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =
   for vsym, value in other:
     if vsym notin env:
       env[vsym] = value
 
-proc match*[V, F](
+func match*[V, F](
   redex: Term[V, F],
   matchers: MatcherList[V, F]): Option[TermEnv[V, F]]
 
-proc match*[V, F](redex: Term[V, F], matcher: TermMatcher[V, F]): Option[TermEnv[V, F]] =
+func match*[V, F](redex: Term[V, F], matcher: TermMatcher[V, F]): Option[TermEnv[V, F]] =
   # NOTE actually I might have to use full-blown backtracking here:
   # each rule might have one or more nested terms. Rule pair is
   # already almost like a clause. The only difference is (1)
@@ -1107,7 +1106,7 @@ proc match*[V, F](redex: Term[V, F], matcher: TermMatcher[V, F]): Option[TermEnv
 
     return some(res)
 
-proc match*[V, F](
+func match*[V, F](
   redex: Term[V, F],
   matchers: MatcherList[V, F]): Option[TermEnv[V, F]] =
   for id in matchers.first[redex.getSym()] & matchers.forceTry:
@@ -1115,7 +1114,7 @@ proc match*[V, F](
     if result.isSome():
       break
 
-proc apply*[V, F](redex: Term[V, F], rule: RulePair[V, F]): Option[TermEnv[V, F]] =
+func apply*[V, F](redex: Term[V, F], rule: RulePair[V, F]): Option[TermEnv[V, F]] =
   ## Match pattern from `rule` with `redex` and return unification
   ## environment.
   return match(redex, rule.matchers)
@@ -1130,7 +1129,7 @@ iterator possibleMatches*[V, F](system: RedSystem[V, F], redex: Term[V, F]): Rul
   for pattId in system.matchers:
     yield pattId
 
-proc findApplicable*[V, F](
+func findApplicable*[V, F](
   system: RedSystem[V, F],
   redex: Term[V, F],
   rs: ReductionState,
@@ -1145,14 +1144,14 @@ proc findApplicable*[V, F](
     if env.isSome():
       return some((id, env.get(), rule))
 
-proc generate*[V, F](rule: RulePair[V, F], env: TermEnv[V, F]): Term[V, F] =
+func generate*[V, F](rule: RulePair[V, F], env: TermEnv[V, F]): Term[V, F] =
   ## Apply generator in `rule` using environment `env`
   if rule.gen.isPattern:
     rule.gen.patt.substitute(env)
   else:
     rule.gen.gen(env)
 
-proc getNthRule*[V, F](system: RedSystem[V, F], idx: int): RulePair[V, F] =
+func getNthRule*[V, F](system: RedSystem[V, F], idx: int): RulePair[V, F] =
   system.rules[idx]
 
 template reductionTriggersBFS*[V, F](
@@ -1197,7 +1196,7 @@ template matchPattern*[V, F](
   block:
     body
 
-proc reduce*[V, F](
+func reduce*[V, F](
   term: Term[V, F],
   system: RedSystem[V, F],
   maxDepth: int = 40,
