@@ -339,6 +339,7 @@ func getFSym*[V, F](t: Term[V, F]): F =
   t.functor
 
 func getSym*[V, F](t: Term[V, F]): F =
+  ## Get functor symbols from term
   case t.getKind():
     of tkFunctor: t.functor
     of tkConstant: t.csym
@@ -348,8 +349,13 @@ func getSym*[V, F](t: Term[V, F]): F =
 
 func getNth*[V, F](
   t: Term[V, F], idx: int): Term[V, F]=
-  assert t.getKind() == tkFunctor
-  t.subterms[idx]
+  ## Get nth argument from functor or nth element from list
+  let k = t.getKind()
+  assert k in {tkFunctor, tkList}
+  if k == tkList:
+    return t.elements[idx]
+  else:
+    return t.arguments.getIt().elements[idx]
 
 func getNthMod*[V, F](
   t: var Term[V, F], idx: int): var Term[V, F] =
@@ -361,50 +367,62 @@ func getNthMod*[V, F](
   else:
     return t.arguments.getIt().elements[idx]
 
-func getArguments*[V, F](
-  t: Term[V, F]): seq[Term[V, F]] =
+func getArguments*[V, F](t: Term[V, F]): seq[Term[V, F]] =
+  ## Get sequence of functor arguments
   assert t.getKind() == tkFunctor
   t.arguments.getIt().elements
 
 func getArgumentList*[V, F](t: Term[V, F]): Term[V, F] =
+  ## Get functor arguments as a term
   assert t.getKind() == tkList
   t.arguments.getIt()
 
 func getElements*[V, F](t: Term[V, F]): seq[Term[V, F]] =
+  ## Get elements from list term
   assert t.getKind() == tkList
   t.elements
 
 func addElement*[V, F](t: var Term[V, F], elem: Term[V, F]): void =
+  ## Append element to list term
   assert t.getkind == tkList
   t.elements.add elem
 
-func setSubt*[V, F](
-  t: var Term[V, F], subt: seq[Term[V, F]]): void =
+func setSubt*[V, F](t: var Term[V, F], subt: seq[Term[V, F]]): void =
+  ## Set arguments for functor
   assert t.getKind() == tkFunctor
   t.subterms = subt
 
 func getValue*[V, F](self: Term[V, F]): V =
+  ## Get value of constant term
   assert self.getKind() == tkConstant
   self.value
 
 #======================  checking possible matches  ======================#
 
 func hasForceTry[V, F](rule: RulePair[V, F]): bool =
+  ## Return true if any rule in matcher is mandatory to try (proc
+  ## matcher)
   rule.matchers.forceTry.len > 0
 
 #=======================  converting to/from term  =======================#
 
 proc isFunctor*[V, F](cb: TermImpl[V, F], val: V): bool =
+ ## Check if symbol for value `V` is a functor
  cb.isFunctorSym(cb.getSym(val))
 
 proc toTerm*[V, F](val: V, cb: TermImpl[V, F]): Term[V, F] =
+  ## Recursively convert value `V` to term using implementation `cb`
   if cb.isFunctor(val):
-    return makeFunctor[V, F](cb.getSym(val), cb.getArguments(val).mapIt(it.toTerm(cb)))
+    return makeFunctor[V, F](
+      cb.getSym(val), cb.getArguments(val).mapIt(it.toTerm(cb)))
   else:
     return makeConstant[V, F](val, cb.getSym(val))
 
 proc fromTerm*[V, F](
   term: Term[V, F], cb: TermImpl[V, F], path: TreePath = @[0]): V =
+  ## Convert `term` back to value type `V` using implementation `cb`.
+  ## `term` MUST be fully substituted - e.g. no placeholder or
+  ## variable terms must be present in tree.
   if term.getKind() notin {tkFunctor, tkConstant, tkList}:
     raiseGenEx(
       "Cannot convert under-substituted term back to tree. " &
@@ -437,7 +455,8 @@ proc assertCorrect*[V, F](impl: TermImpl[V, F]): void =
   for name, value in impl.fieldPairs():
     assert (not value.isNil()), name & " cannot be nil"
 
-func makeMatcherList*[V, F](matchers: seq[TermMatcher[V, F]]): MatcherList[V, F] =
+func makeMatcherList*[V, F](
+  matchers: seq[TermMatcher[V, F]]): MatcherList[V, F] =
   result.patterns = matchers
 
   for id, rule in matchers:
@@ -448,7 +467,8 @@ func makeMatcherList*[V, F](matchers: seq[TermMatcher[V, F]]): MatcherList[V, F]
 
 
 func makeRulePair*[V, F](
-  rules: seq[TermMatcher[V, F]], gen: TermGenerator[V, F]): RulePair[V, F] =
+  rules: seq[TermMatcher[V, F]],
+  gen: TermGenerator[V, F]): RulePair[V, F] =
   result.gen = gen
   result.matchers = makeMatcherList(rules)
 
@@ -899,6 +919,10 @@ func unif*[V, F](elems: seq[Term[V, F]],
                  patt: TermPattern[V, F],
                  env: TermEnv[V, F] = makeEnvironment[V, F](),
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
+  ## Unify `patt` to elements in `elems` using environment `env`. If
+  ## `fullMatch` is true yield some() environment only if input
+  ## sequence matcher completely. Otherwise repeatedly apply pattern
+  ## on sequence.
   if fullMatch:
     let (resenv, endpos) = partialMatch(elems, 0, patt, env)
     if endpos != elems.len:
