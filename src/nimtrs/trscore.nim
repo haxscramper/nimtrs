@@ -653,16 +653,6 @@ func `[]=`*[V, F](env: var TermEnv[V, F],
 
   env.values[key] = rhs
 
-
-# func `[]=`*[V, F](env: var TermEnv[V, F],
-#                   lhs: Term[V, F], rhs: Term[V, F]): void =
-#   # ## Add rule to environment
-#   # let key: VarSym = typeCondIt lhs:
-#   #   [string, parseVarSym(it)]
-#   #   [Term[V, F], it.name]
-
-#   env.values[lhs.name] = rhs
-
 func `[]=`*[V, F](system: var RedSystem[V, F],
                   lhs: TermVar[V, F], rhs: Term[V, F]): void =
   ## Add rule to environment
@@ -671,23 +661,6 @@ func `[]=`*[V, F](system: var RedSystem[V, F],
     [Term[V, F], it.name]
 
   system.rules[key] = rhs
-
-# func `[]=`*[V, F](env: var TermEnv[V, F],
-#                   variable: VarSym, value: Term[V, F]): void =
-#   ## Set value for variable in environemt
-#   env.values[variable] = value
-
-
-# func `[]=`*[V, F](env: var TermEnv[V, F],
-#                   variable: string, value: Term[V, F]): void =
-#   ## Set value for variable in environemt
-#   env.values[parseVarsym(variable)] = value
-
-# func `[]=`*[V, F](env: var TermEnv[V, F],
-#                   variable, value: Term[V, F]): void =
-#   ## Set value for variable in environemt
-#   env.values[variable.name] = value
-
 
 func `==`*[V, F](lhs, rhs: Term[V, F]): bool =
   lhs.tkind == rhs.tkind and (
