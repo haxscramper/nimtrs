@@ -105,9 +105,12 @@ proc makeSystem(rules: varargs[(TrmMatch, TrmTerm)]): TrmSys =
       lhs, makeGenerator(rhs))))
 
 proc makePatt(
-  upper: TrmTerm, subpatts: varargs[(VarSym, TrmTerm)],
+  upper: TrmTerm, subpatts: varargs[(string, TrmTerm)],
   default: TrmDefGenp = nil): TrmMatch =
-  makeMatcher(upper, toSeq(subpatts).toPattList(), default)
+  makeMatcher(
+    upper,
+    subpatts.mapPairs((parseVarSym(lhs), rhs)).toPattList(),
+    default)
 
 
 #================================  tests  ================================#
@@ -280,9 +283,9 @@ suite "Pattern matching":
         )
       ).get()
 
-      echo res["e"].exprRepr()
-      cmpTerm res["e"], # Environment contains variable `e` matched with
-                        # list `[12, 22]`
+      echo res["@e"].exprRepr()
+      cmpTerm res["@e"], # Environment contains variable `e` matched with
+                         # list `[12, 22]`
           nList(@[nConst 12, nConst 22])
 
     block:
@@ -311,7 +314,7 @@ suite "Pattern matching":
       @[12, 22],
       (makeTermP(nVar("e", true)), false),
       {
-        "e" : nList(@[nConst 12, nConst 22])
+        "@e" : nList(@[nConst 12, nConst 22])
       }
     )
 
@@ -347,8 +350,8 @@ suite "Pattern matching":
         makeTermP nVar("z", true)
       ])), false),
       {
-        "e" : nList(@[nConst 1, nConst 3]),
-        "z" : nList(@[nconst 2, nconst 4])
+        "@e" : nList(@[nConst 1, nConst 3]),
+        "@z" : nList(@[nconst 2, nconst 4])
       }
     )
 
@@ -360,7 +363,7 @@ suite "Pattern matching":
         makeOptP makeTermP(nConst 2),
       ]), false),
       {
-        "l" : nList(@[nconst 1, nconst 3, nconst 4])
+        "@l" : nList(@[nconst 1, nconst 3, nconst 4])
       }
     )
 
@@ -566,7 +569,7 @@ suite "Nim trs reduction rule search":
         result["ord0"] = nConst(4)
         result["ord1"] = nConst(6)
       ,
-      @["order"]
+      @["order".parseVarSym()]
     )
 
     let res: U = term.matchPattern(matcher):

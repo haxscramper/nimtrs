@@ -6,6 +6,15 @@ import hmisc/helpers
 import hdrawing, hdrawing/term_buf
 import trscore
 
+proc exprRepr*(vs: VarSym): string =
+  # if vs.listidxp:
+  #   "#" & $vs.idx
+  # else:
+  if vs.listvarp:
+    "@" & $vs.getVName()
+  else:
+    "_" & $vs.getVName()
+
 proc treeRepr*[V, F](term: Term[V, F],
                      cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)
@@ -16,7 +25,7 @@ proc treeRepr*[V, F](term: Term[V, F],
     of tkPlaceholder:
       return ind & "plh _"
     of tkVariable:
-      return ind & "var " & getVName(term)
+      return ind & "var " & getVName(term).exprRepr()
     of tkFunctor:
       return (
         @[ ind & "fun " & $(getFSym(term)) ] &
@@ -39,7 +48,6 @@ proc treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
     return cb.valStrGen(val)
       .split("\n").mapIt(ind & "cst " & it).join("\n")
 
-proc exprRepr*(vs: VarSym): string = "_" & vs
 proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
   case term.getKind():
     of tkPattern:
@@ -78,7 +86,7 @@ proc exprRepr*[V, F](matcher: TermMatcher[V, F], cb: TermImpl[V, F]): TermBuf =
   for varn, subp in matcher.subpatts:
     subvars.appendRow(
       @[
-        (varn & ": ").toTermBufFast(),
+        (varn.exprRepr() & ": ").toTermBufFast(),
         subp.exprReprImpl(cb)
       ],
       emptyTermBuf

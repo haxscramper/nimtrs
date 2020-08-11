@@ -1,14 +1,14 @@
 ## Term algorithms. Implmenetation uses callback functions for getting
 ## values/types from terms.
 
-import hashes, sequtils, tables, strformat, strutils, sugar
+import hashes, sequtils, tables, strformat, strutils, sugar, macros
 import options
 import deques, intsets, sets
 export tables, intsets
 
 import hmisc/types/[htrie, hprimitives]
 import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
-import hmisc/helpers
+import hmisc/[helpers, hexceptions]
 
 type
   InfoException = ref object of CatchableError
@@ -63,7 +63,10 @@ type
     tkList
     tkPattern
 
-  VarSym* = string
+  VarSym* = object
+    isList: bool
+    name: string
+
   VarSet* = HashSet[VarSym]
 
   SubstitutionErrorInfo* = object
@@ -86,14 +89,7 @@ type
         csym: F
         value: V
       of tkVariable:
-        case isIdx: bool
-          of true:
-            idx: int
-          of false:
-            isList: bool ## Variable is bound to list? (contains
-            ## multiple values)
-
-            name: VarSym
+        name: VarSym
       of tkList:
         elements: seq[Term[V, F]]
       of tkPattern:
@@ -104,39 +100,36 @@ type
 
 
   TermImpl*[V, F] = object
-    ##[
+    ## Callback procs for concrete types.
+    ##
+    ## 'Implementation' of certain actions for concrete types `V` and `F`.
+    ##
+    ## ## Example
+    ##
+    ## Example for `NimNode` and `NimNodeKind`
+    ##
+    ## .. code-block:: nim
+    ##
+    ##     func isFunctor*(nnk: NimNodeKind): bool =
+    ##       nnk notin {
+    ##         nnkNone, nnkEmpty, nnkNilLit, # Empty node
+    ##         nnkCharLit..nnkUInt64Lit, # Int literal
+    ##         nnkFloatLit..nnkFloat64Lit, # Float literal
+    ##         nnkStrLit..nnkTripleStrLit, nnkCommentStmt, nnkIdent, nnkSym # Str lit
+    ##       }
+    ##
+    ##     const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
+    ##       getsym: (proc(n: NimNode): NimNodeKind = n.kind),
+    ##       isFunctorSym: (proc(kind: NimNodeKind): bool = kind.isFunctor()),
+    ##       makeFunctor: (
+    ##         proc(op: NimNodeKind, sub: seq[NimNode]): NimNode =
+    ##           if sub.len == 0: newNimNode(op)
+    ##           else: newTree(op, sub)
+    ##       ),
+    ##       getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
+    ##       valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
+    ##     )
 
-Callback procs for concrete types.
-
-'Implementation' of certain actions for concrete types `V` and `F`.
-
-## Example
-
-Example for `NimNode` and `NimNodeKind`
-
-.. code-block:: nim
-
-    func isFunctor*(nnk: NimNodeKind): bool =
-      nnk notin {
-        nnkNone, nnkEmpty, nnkNilLit, # Empty node
-        nnkCharLit..nnkUInt64Lit, # Int literal
-        nnkFloatLit..nnkFloat64Lit, # Float literal
-        nnkStrLit..nnkTripleStrLit, nnkCommentStmt, nnkIdent, nnkSym # Str lit
-      }
-
-    const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
-      getsym: (proc(n: NimNode): NimNodeKind = n.kind),
-      isFunctorSym: (proc(kind: NimNodeKind): bool = kind.isFunctor()),
-      makeFunctor: (
-        proc(op: NimNodeKind, sub: seq[NimNode]): NimNode =
-          if sub.len == 0: newNimNode(op)
-          else: newTree(op, sub)
-      ),
-      getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
-      valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
-    )
-
-    ]##
     isFunctorSym*: proc(val: F): bool
     getArguments*: proc(val: V): seq[V]
     getSym*: proc(val: V): F
@@ -247,6 +240,12 @@ proc cannotUse(rs: ReductionState, path: TreePath, rule: RuleId): bool =
 
 #==========================  making new terms  ===========================#
 
+func makeVarSym*(name: string, islist: bool): VarSym =
+  VarSym(name: name, islist: islist)
+
+func parseVarSym*(str: string): VarSym =
+  if str[0] == '@': makeVarSym(str[1..^1], true)
+  else: makeVarSym(str, false)
 
 func makePlaceholder*[V, F](): Term[V, F] =
   Term[V, F](tkind: tkPlaceholder)
@@ -254,11 +253,14 @@ func makePlaceholder*[V, F](): Term[V, F] =
 func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
   Term[V, F](tkind: tkConstant, value: val, csym: csym)
 
-func makeVariable*[V, F](name: VarSym, isList: bool = false): Term[V, F] =
-  Term[V, F](tkind: tkVariable, name: name, isIdx: false, isList: isList)
+func makeVariable*[V, F](name: string, isList: bool = false): Term[V, F] =
+  Term[V, F](tkind: tkVariable, name: makeVarSym(name, isList))
 
-func makeVariable*[V, F](idx: int): Term[V, F] =
-  Term[V, F](tkind: tkVariable, idx: idx, isIdx: true)
+func makeVariable*[V, F](vsym: VarSym): Term[V, F] =
+  Term[V, F](tkind: tkVariable, name: vsym)
+
+# func makeVariable*[V, F](idx: int): Term[V, F] =
+#   Term[V, F](tkind: tkVariable, name: makeVarSym(idx))
 
 func makeList*[V, F](elements: seq[Term[V, F]]): Term[V, F] =
   Term[V, F](tkind: tkList, elements: elements)
@@ -296,9 +298,27 @@ func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
 func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
 
+#============================  Aux functions  ============================#
+
+func hash*(vs: VarSym): Hash =
+  var h: Hash = 0
+  h = h !& hash(vs.isList) !& hash(vs.name)
+  result = !$h
+
+func `==`*(l, r: VarSym): bool = l.isList == r.isList and l.name == r.name
+
+func `==`*(l: VarSym, str: string): bool =
+  case str[0]:
+    of '@': (l.isList and l.name == str[1..^1])
+    of '_': (not l.isList and l.name == str[1..^1])
+    else: (not l.isList and l.name == str)
+
 #======================  accessing term internals  =======================#
 
-func listvarp*[V, F](t: Term[V, F]): bool = t.isList
+func listvarp*(vs: VarSym): bool = vs.isList
+func getVName*(vs: VarSym): string = vs.name
+
+func listvarp*[V, F](t: Term[V, F]): bool = t.name.listvarp()
 
 func getKind*[V, F](t: Term[V, F]): TermKind =
   t.tkind
@@ -473,8 +493,15 @@ func getExportedVars*[V, F](patts: PattList[V, F]): VarSet =
 
 func exportedVars*[V, F](matcher: TermMatcher[V, F]): VarSet = matcher.varlist
 
+
 func toPattList*[V, F](patts: varargs[(VarSym, Term[V, F])]): PattList[V, F] =
   toTable(patts.mapPairs((lhs, makeMatcherList(@[ rhs.makeMatcher() ]))))
+
+func toPattList*[V, F](patts: varargs[(string, Term[V, F])]): PattList[V, F] =
+  patts.mapPairs((lhs.parseVarSym(), rhs)).toPattList()
+  # toTable(patts.mapPairs((lhs, makeMatcherList(@[ rhs.makeMatcher() ]))))
+
+
 
 func makeRulePair*[V, F](
   rule: TermMatcher[V, F], gen: TermGenerator[V, F]): RulePair[V, F] =
@@ -516,7 +543,7 @@ func makeMatcher*[V, F](
   optVars: seq[VarSym] = @[]): TermMatcher[V, F] =
   ## Create new toplevel term matcher from multiple smaller ones. New
   ## variable `auxToplevelCatchall` is introduced.
-  let catchallName = "auxToplevelCatchall"
+  let catchallName: VarSym = makeVarSym("auxToplevelCatchall", false)
   makeMatcher(
     makeVariable[V, F](catchallName),
     {
@@ -560,10 +587,10 @@ func isBound*[V, F](env: TermEnv[V, F], term: VarSym): bool =
   ## Check if variable is bound to somethin in `env`
   (term in env.values) # and env[term] != term
 
-func `[]`*[V, F](e: TermEnv[V, F], t: VarSym): Term[V, F] =
+template getValImpl(): untyped {.dirty.} =
   ## Access value from environment.
   try:
-    e.values[t]
+    return e.values[t]
   except KeyError:
     # TODO check if `VarSym` can be converter to string
     # TODO use define to constrol exception verbosity
@@ -573,26 +600,93 @@ func `[]`*[V, F](e: TermEnv[V, F], t: VarSym): Term[V, F] =
       &"Missing variable `{t}` in environment. Have vars: {vars}")
 
 
-func `[]`*[V, F](e: var TermEnv[V, F], t: VarSym): var Term[V, F] =
-  e.values[t]
+macro typeCondIt*(head, body: untyped): untyped =
+  assert body.kind == nnkStmtList
+  result = nnkWhenStmt.newTree()
+  for line in body:
+    case line.kind:
+      of nnkBracket:
+        assertNodeIt(
+          line, it.len == 2, "Expected bracket with two elements")
+        let
+          ntype = line[0]
 
-func `[]`*[V, F](e: var TermEnv[V, F], t: Term[V, F]): var Term[V, F] =
-  e.values[t.name]
+        result.add nnkElifBranch.newTree(
+          nnkInfix.newTree(ident "is", ident "it", line[0]), line[1])
+      else:
+        assertNodeIt(line, false, "Expected bracket with two elements")
 
+  result.add nnkElse.newTree(head)
 
-func `[]=`*[V, F](system: var RedSystem[V, F], lhs, rhs: Term[V, F]): void =
-  ## Add rule to environment
-  system.rules[lhs] = rhs
+  result = quote do:
+    block:
+      let it {.inject.} = `head`
+      `result`
 
-func `[]=`*[V, F](env: var TermEnv[V, F], variable: VarSym, value: Term[V, F]): void =
-  ## Set value for variable in environemt
-  env.values[variable] = value
+func getVal*[V, F](e: TermEnv[V, F], t: VarSym): Term[V, F] =
+  getValImpl()
+
+func getVal*[V, F](e: var TermEnv[V, F], t: VarSym): var Term[V, F] =
+  getValImpl()
+
+type TermVar[V, F] = VarSym | Term[V, F] | string
+
+func `[]`*[V, F](env: TermEnv[V, F], term: TermVar[V, F]): Term[V, F] =
+  env.getVal:
+    typeCondIt term:
+      [string, parsevarsym(it)]
+      [Term[V, F], it.name]
+
+func `[]`*[V, F](env: var TermEnv[V, F], term: TermVar[V, F]): var Term[V, F] =
+  env.getVal:
+    typeCondIt term:
+      [string, parsevarsym(it)]
+      [Term[V, F], it.name]
 
 
 func `[]=`*[V, F](env: var TermEnv[V, F],
-                  variable, value: Term[V, F]): void =
-  ## Set value for variable in environemt
-  env.values[variable.name] = value
+                  lhs: TermVar[V, F], rhs: Term[V, F]): void =
+  ## Add rule to environment
+  let key: VarSym = typeCondIt lhs:
+    [string, parseVarSym(it)]
+    [Term[V, F], it.name]
+
+  env.values[key] = rhs
+
+
+# func `[]=`*[V, F](env: var TermEnv[V, F],
+#                   lhs: Term[V, F], rhs: Term[V, F]): void =
+#   # ## Add rule to environment
+#   # let key: VarSym = typeCondIt lhs:
+#   #   [string, parseVarSym(it)]
+#   #   [Term[V, F], it.name]
+
+#   env.values[lhs.name] = rhs
+
+func `[]=`*[V, F](system: var RedSystem[V, F],
+                  lhs: TermVar[V, F], rhs: Term[V, F]): void =
+  ## Add rule to environment
+  let key: VarSym = typeCondIt lhs:
+    [string, parseVarSym(it)]
+    [Term[V, F], it.name]
+
+  system.rules[key] = rhs
+
+# func `[]=`*[V, F](env: var TermEnv[V, F],
+#                   variable: VarSym, value: Term[V, F]): void =
+#   ## Set value for variable in environemt
+#   env.values[variable] = value
+
+
+# func `[]=`*[V, F](env: var TermEnv[V, F],
+#                   variable: string, value: Term[V, F]): void =
+#   ## Set value for variable in environemt
+#   env.values[parseVarsym(variable)] = value
+
+# func `[]=`*[V, F](env: var TermEnv[V, F],
+#                   variable, value: Term[V, F]): void =
+#   ## Set value for variable in environemt
+#   env.values[variable.name] = value
 
 
 func `==`*[V, F](lhs, rhs: Term[V, F]): bool =
@@ -626,12 +720,18 @@ iterator pairs*[V, F](env: TermEnv[V, F]): (VarSym, Term[V, F]) =
   for lhs, rhs in pairs(env.values):
     yield (lhs, rhs)
 
+func contains*(vset: VarSet, vname: string): bool =
+  vname.parseVarSym() in vset
+
 func contains*[V, F](env: TermEnv[V, F], vsym: VarSym): bool =
   vsym in env.values
 
 func contains*[V, F](env: TermEnv[V, F], term: Term[V, F]): bool =
   assert term.getkind == tkVariable
   term.name in env.values
+
+func contains*[V, F](env: TermEnv[V, F], vname: string): bool =
+  vname.parseVarSym() in env.values
 
 func hasAll*[V, F](env: TermEnv[V, F], varlist: VarSet): bool =
   result = true
@@ -766,7 +866,7 @@ func partialMatch[V, F](
       let term = patt.term.getIt()
       case getKind(term):
         of tkVariable:
-          if term.isList:
+          if term.listvarp():
             if term notin env:
               env[term] = makeList(@[elems[pos]])
             else:
