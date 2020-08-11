@@ -38,6 +38,7 @@ type
   TrmDefGenp = DefaultGenProc[Trm, TrmKind]
   TrmRule = RulePair[Trm, TrmKind]
   TrmMatch = TermMatcher[Trm, TrmKind]
+  TrmPatt = TermPattern[Trm, TrmKind]
 
 func nOp(subt: varargs[TrmTerm]): TrmTerm =
   makeFunctor[Trm, TrmKind](tmkF, toSeq(subt))
@@ -78,7 +79,7 @@ proc toTerm(interm: Trm): TrmTerm = interm.toTerm(trmImpl)
 proc treeRepr(val: Trm): string = treeRepr(val, trmImpl)
 proc treeRepr(val: TrmTerm): string = treeRepr(val, trmImpl)
 
-proc exprRepr(val: TrmEnv | TrmTerm | TrmSys | TrmRule): string =
+proc exprRepr(val: TrmEnv | TrmTerm | TrmSys | TrmRule | TrmPatt): string =
   exprRepr(val, trmImpl)
 
 proc makeSystem(rules: varargs[(TrmTerm, TrmTerm)]): TrmSys =
@@ -212,6 +213,56 @@ suite "Nim trs primitives":
     cmpTerm res["ii"], nConst(12)
     cmpTerm res["oo"], nConst(90)
 
+
+  test "Pretty-printing":
+    echo makeSystem({
+      makePatt(
+        nOp(nVar("i1"), nConst(nT(90))),
+        {
+          "i1" : nConst(nT(20)),
+          "i2" : nOp(nVar("i1"), nConst(nT(90))),
+        }
+      ) : nVar("i1")
+    }).exprRepr()
+
+    assertEq nOp(nConst(12), nConst(22)).exprRepr(), "tmkF('12', '22')"
+    assertEq mkEnv({"ii" : nConst(nT(10))}).exprRepr(), "{(_ii -> '10')}"
+
+    assertEq makeRule(nOp(nVar("i1")), nVar("i1")).exprRepr(),
+           "tmkF(_i1) ~~> _i1"
+
+    assertEq makeSystem({
+      nOp(nVar("i1"), nConst(nT(90))) : nVar("i1")
+    }).exprRepr(), "0: tmkF(_i1, '90') ~~> _i1"
+
+suite "Pattern matching":
+  proc unifTest(list: seq[int],
+                patt: (TermPattern[Trm, TrmKind], bool) | TrmTerm,
+                expected: openarray[(string, TrmTerm)]): void =
+
+    let resOpt = unif(
+      list.mapIt(nConst(it)).nList(),
+      when patt is TrmTerm:
+        patt
+      else:
+        makePattern(patt[0], patt[1])
+    )
+
+    if resOpt.isNone():
+      echo "Unification failed"
+      echo "list: ", list
+      when patt is TrmTerm:
+        echo "pattern: ", patt.exprRepr()
+      else:
+        echo "pattern: ", patt[0].exprRepr()
+
+      raiseAssert("Fail")
+    else:
+      let res = resOpt.get()
+      echo res.exprRepr()
+      for (vname, val) in expected:
+        cmpTerm res[vname], val
+
   test "Patter unification test":
     block:
       let res = unif(
@@ -244,26 +295,44 @@ suite "Nim trs primitives":
       echo res["ii"].exprRepr()
       cmpTerm res["ii"], nConst(1)
 
-  test "Pretty-printing":
-    echo makeSystem({
-      makePatt(
-        nOp(nVar("i1"), nConst(nT(90))),
-        {
-          "i1" : nConst(nT(20)),
-          "i2" : nOp(nVar("i1"), nConst(nT(90))),
-        }
-      ) : nVar("i1")
-    }).exprRepr()
+  test "Test proc test":
+    unifTest(
+      @[ 1, 1 ],
+      (makeTermP(nVar("ii", false)), false),
+      {
+        "ii" : nConst(1)
+      }
+    )
 
-    assertEq nOp(nConst(12), nConst(22)).exprRepr(), "tmkF('12', '22')"
-    assertEq mkEnv({"ii" : nConst(nT(10))}).exprRepr(), "{(_ii -> '10')}"
+    unifTest(
+      @[12, 22],
+      (makeTermP(nVar("e", true)), false),
+      {
+        "e" : nList(@[nConst 12, nConst 22])
+      }
+    )
 
-    assertEq makeRule(nOp(nVar("i1")), nVar("i1")).exprRepr(),
-           "tmkF(_i1) ~~> _i1"
+  test "And pattern match":
+    unifTest(
+      @[1, 2],
+      (makeAndP(@[
+        makeTermP nVar("e"),
+        makeTermP nVar("z")
+      ]), true),
+      {
+        "e" : nConst(1),
+        "z" : nConst(2)
+      }
+    )
 
-    assertEq makeSystem({
-      nOp(nVar("i1"), nConst(nT(90))) : nVar("i1")
-    }).exprRepr(), "0: tmkF(_i1, '90') ~~> _i1"
+    unifTest(
+      @[1, 2],
+      nList(@[nVar("e"), nVar("z")]),
+      {
+        "e" : nConst(1),
+        "z" : nConst(2)
+      }
+    )
 
 
 suite "Nim trs reduction rule search":

@@ -49,7 +49,8 @@ proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
     of tkConstant:
       "'" & cb.valStrGen(term.getValue()) & "'"
     of tkVariable:
-      "_" & $term.getVName()
+      debugecho term
+      tern(term.listvarp, "@", "_") & $term.getVName()
     of tkFunctor:
       if ($getSym(term)).validIdentifier():
         $getSym(term) & "(" & term.getArguments().mapIt(it.exprRepr(cb)).join(", ") & ")"
@@ -124,4 +125,22 @@ proc exprReprImpl*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): TermBuf =
   ).toTermBuf()
 
 proc exprRepr*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): string =
-  exprReprImpl(sys, cb).toString().split("\n").mapIt(it.strip(leading = false)).join("\n")
+  exprReprImpl(sys, cb).toString().split("\n").mapIt(
+    it.strip(leading = false)).join("\n")
+
+proc exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+  case expr.kind:
+    of tpkTerm:
+      expr.term.getIt().exprRepr(cb)
+    of tpkConcat:
+      expr.patterns.mapIt(it.exprRepr(cb)).join(" & ").wrap("{}")
+    of tpkAlternative:
+      expr.patterns.mapIt(it.exprRepr(cb)).join(" | ").wrap("{}")
+    of tpkZeroOrMore, tpkOptional, tpkNegation:
+      let pref = case expr.kind:
+        of tpkZeroOrMore: "*"
+        of tpkOptional: "?"
+        of tpkNegation: "!"
+        else: ""
+
+      pref & expr.patt.getIt().exprRepr(cb).wrap("()")

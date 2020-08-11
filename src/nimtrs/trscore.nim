@@ -29,10 +29,10 @@ type
   SingleIt[T] = object
     it: seq[T]
 
-func getIt[T](it: SingleIt[T]): T = it.it[0]
-func setIt[T](it: var SingleIt[T], val: T): void = (it.it[0] = val)
-func getIt[T](it: var SingleIt[T]): var T = it.it[0]
-func mkIt[T](it: T): SingleIt[T] = SingleIt[T](it: @[it])
+func getIt*[T](it: SingleIt[T]): T = it.it[0]
+func setIt*[T](it: var SingleIt[T], val: T): void = (it.it[0] = val)
+func getIt*[T](it: var SingleIt[T]): var T = it.it[0]
+func mkIt*[T](it: T): SingleIt[T] = SingleIt[T](it: @[it])
 converter toT[T](it: SingleIt[T]): T = it.it[0]
 
 type
@@ -297,6 +297,8 @@ func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
 
 #======================  accessing term internals  =======================#
+
+func listvarp*[V, F](t: Term[V, F]): bool = t.isList
 
 func getKind*[V, F](t: Term[V, F]): TermKind =
   t.tkind
@@ -732,60 +734,86 @@ func unif*[V, F](
 
 func partialMatch[V, F](
   elems: seq[Term[V, F]],
+  startpos: int,
   patt: TermPattern[V, F],
   env: TermEnv[V, F] = makeEnvironment[V, F]()
-     ): tuple[env: Option[TermEnv[V, F]], endpos: int] =
+     ): tuple[env: Option[TermEnv[V, F]], shift: int] =
 
+  var pos = startpos
   var env = env
-  var idx: int = 0
-  # debugecho patt
-  while idx < elems.len:
-    case patt.kind:
-      of tpkTerm:
-        let term = patt.term.getIt()
-        case getKind(term):
-          of tkVariable:
-            # debugecho term
-            if term.isList:
-              # debugecho &"Item [{idx}] matches"
-              if term notin env:
-                env[term] = makeList(@[elems[idx]])
-              else:
-                env[term].addElement elems[idx]
-
-              inc idx
-              # var val = term.derefOrDefault(env, makeList[V, F](@[]))
-              # debugecho "val: ", val
+  # var pos: int = 0
+  let noRes = (none(TermEnv[V, F]), 0)
+  # echov elems
+  case patt.kind:
+    of tpkTerm:
+      let term = patt.term.getIt()
+      case getKind(term):
+        of tkVariable:
+          if term.isList:
+            if term notin env:
+              env[term] = makeList(@[elems[pos]])
             else:
-              if term in env:
-                # debugecho term.name, idx
-                # debugecho env[term]
-                # debugecho elems[idx]
-                let res = unif(env[term], elems[idx])
-                if res.isSome():
-                  inc idx
-                else:
-                  raiseAssert("#[ IMPLEMENT ]#")
-              else:
-                env[term] = elems[idx]
-                inc idx
-          else:
-            raiseAssert("#[ IMPLEMENT ]#")
-      else:
-        raiseAssert("#[ IMPLEMENT ]#")
+              env[term].addElement elems[pos]
 
-  # debugecho env
-  return (some(env), idx)
+            inc pos
+            # dechofmt "matched variable {term.name} next idx: {pos}"
+          else:
+            if term in env:
+              let res = unif(env[term], elems[pos])
+              if res.isSome():
+                inc pos
+              else:
+                return noRes
+            else:
+              env[term] = elems[pos]
+              inc pos
+        else:
+          raiseAssert("#[ IMPLEMENT ]#")
+    of tpkConcat:
+      for subpatt in patt.patterns:
+        let (resenv, endpos) = partialMatch(elems, pos, subpatt, env)
+
+        if resenv.isSome():
+          env = resenv.get()
+        else:
+          return noRes
+
+        pos = endpos
+    else:
+      raiseAssert("#[ IMPLEMENT ]#")
+
+  # echov pos, "Result position"
+  return (some(env), pos)
 
 func unif*[V, F](elems: seq[Term[V, F]],
                  patt: TermPattern[V, F],
                  env: TermEnv[V, F] = makeEnvironment[V, F](),
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
   if fullMatch:
-    raiseAssert("#[ IMPLEMENT ]#")
+    let (resenv, shift) = partialMatch(elems, 0, patt, env)
+    if shift != elems.len - 1:
+      return none(TermEnv[V, F]) # Not matched full pattern
+    else:
+      return resenv # Matched whole input
   else:
-    let (env, endpos) = partialMatch(elems, patt, env)
-    return env
+    var env = env
+    var pos = 0
+
+    while pos < elems.len:
+      # NOTE for now I will assum passing sublist is really cheap. If
+      # not - will use linked list or something like that.
+      let (resenv, endpos) = partialMatch(elems, pos, patt, env)
+      # echov resenv.isSome(), endpos
+      if resenv.isSome():
+        env = resenv.get()
+        pos = endpos
+      else:
+        if endpos == pos:
+          return none(TermEnv[V, F]) # Not a single match
+        else:
+          return resenv # At least one match
+
+    return some(env)
 
 func unif*[V, F](
   t1, t2: Term[V, F],
