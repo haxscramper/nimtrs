@@ -738,11 +738,16 @@ func partialMatch[V, F](
   patt: TermPattern[V, F],
   env: TermEnv[V, F] = makeEnvironment[V, F]()
      ): tuple[env: Option[TermEnv[V, F]], shift: int] =
+  ## Apply pattern `patt` to subsequence `elems[startpos .. ^1]` and
+  ## return match end position + updated environment. If match is
+  ## unsuccesful return `startpos` and `none` env, otherwise return
+  ## position of the first item *not matched* by pattern.
 
+  # mixin exprRepr
   var pos = startpos
   var env = env
   # var pos: int = 0
-  let noRes = (none(TermEnv[V, F]), 0)
+  let noRes = (none(TermEnv[V, F]), startpos)
   # echov elems
   case patt.kind:
     of tpkTerm:
@@ -775,10 +780,13 @@ func partialMatch[V, F](
 
         if resenv.isSome():
           env = resenv.get()
+          pos = endpos
         else:
           return noRes
 
         pos = endpos
+
+      return (some(env), pos)
     else:
       raiseAssert("#[ IMPLEMENT ]#")
 
@@ -790,8 +798,8 @@ func unif*[V, F](elems: seq[Term[V, F]],
                  env: TermEnv[V, F] = makeEnvironment[V, F](),
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
   if fullMatch:
-    let (resenv, shift) = partialMatch(elems, 0, patt, env)
-    if shift != elems.len - 1:
+    let (resenv, endpos) = partialMatch(elems, 0, patt, env)
+    if endpos != elems.len:
       return none(TermEnv[V, F]) # Not matched full pattern
     else:
       return resenv # Matched whole input
@@ -803,12 +811,12 @@ func unif*[V, F](elems: seq[Term[V, F]],
       # NOTE for now I will assum passing sublist is really cheap. If
       # not - will use linked list or something like that.
       let (resenv, endpos) = partialMatch(elems, pos, patt, env)
-      # echov resenv.isSome(), endpos
       if resenv.isSome():
         env = resenv.get()
+        # echov pos, env.exprRepr()
         pos = endpos
       else:
-        if endpos == pos:
+        if endpos == 0:
           return none(TermEnv[V, F]) # Not a single match
         else:
           return resenv # At least one match
