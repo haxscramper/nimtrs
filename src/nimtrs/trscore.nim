@@ -1006,6 +1006,7 @@ func unif*[V, F](
         elems2 = val2.getElements()
 
       while (idx1 < elems1.len) and (idx2 < elems2.len):
+        echov tmpres.exprRepr()
         let
           el1 = elems1[idx1]
           el2 = elems2[idx2]
@@ -1018,9 +1019,10 @@ func unif*[V, F](
           let (resenv, newpos) = partialMatch(
             elems2, idx2, el1.getPatt(), tmpRes)
 
-          iflet (tmpres = resenv):
+          iflet (res = resenv):
             inc idx1
             idx2 = newpos
+            tmpres.mergeEnv res
           else:
             return none(TermEnv[V, F])
 
@@ -1028,9 +1030,10 @@ func unif*[V, F](
           let (resenv, newpos) = partialMatch(
             elems1, idx1, el2.getPatt(), tmpRes)
 
-          iflet (tmpres = resenv):
+          iflet (res = resenv):
             inc idx2
             idx1 = newpos
+            tmpres.mergeEnv res
           else:
             return none(TermEnv[V, F])
         else:

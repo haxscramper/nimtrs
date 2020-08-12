@@ -399,6 +399,7 @@ suite "Pattern matching":
     assert unifRes.isSome()
 
     let res = unifRes.get()
+    echo res.exprRepr()
 
     cmpTerm res["@a"], nList(@[nconst 2, nconst 4, nconst 8])
     cmpTerm res["@b"], nList(@[nconst 3, nconst 9, nconst 27])
