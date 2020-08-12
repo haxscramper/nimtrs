@@ -4,6 +4,10 @@ import nimtrs/[trscore, trspprint]
 
 #===========================  implementation  ============================#
 
+
+func unif*[V, F](t1, t2: Term[V, F]): Option[TermEnv[V, F]] =
+  unif(t1, t2, makeEnvironment[V, F]())
+
 type
   TrmKind = enum
     tmkF
@@ -84,6 +88,9 @@ proc treeRepr(val: TrmTerm): string = treeRepr(val, trmImpl)
 
 proc exprRepr(val: TrmEnv | TrmTerm | TrmSys | TrmRule | TrmPatt): string =
   exprRepr(val, trmImpl)
+
+proc exprRepr(elems: seq[TrmTerm]): string =
+  elems.mapIt(it.exprRepr()).join(", ").wrap(("[", "]"))
 
 proc makeSystem(rules: varargs[(TrmTerm, TrmTerm)]): TrmSys =
   makeReductionSystem[Trm, TrmKind](
@@ -342,6 +349,8 @@ suite "Pattern matching":
       }
     )
 
+  # if true: quit 0
+
   test "Zero-or-more pattern":
     unifTest(
       @[1, 2, 3, 4, 5],
@@ -370,40 +379,77 @@ suite "Pattern matching":
     )
 
   test "Extract from functor arguments":
-    let interm: Trm = nT(
-      nT(nT(2), nT(3)),
-      nT(nT(4), nT(9)),
-      nT(nT(8), nT(27)),
-      nT(90)
-    )
+    if false:
+      let interm: Trm = nT(nt 1, nt 2, nt 3)
+      let pattern: TrmTerm =
+        nOp(
+          makePattern(
+              makeZeroOrMoreP(
+                makeTermP nVar("a", islist = true)
+              ), fullMatch = true))
 
-    let pattern: TrmTerm =
-      nOp( # `Op( *Op(@a, @b) & c )`
-        makePattern( # `*Op(@a, @b) & c`
-          makeAndP(@[
-            makeZeroOrMoreP( # `*Op(@a, @b)`
-              makeTermP nOp( # `Op(@a, @b)`
-                nVar("a", islist = true), # `@a`
-                nVar("b", islist = true)  # `@b`
-              )
-            ),
-            makeTermP nVar("c", islist = false) # `c`
-          ]),
-          fullMatch = true))
+      let unifRes = unif(interm.toTerm(), pattern)
 
-    let unifRes = unif(
-      interm.toTerm(),
-      pattern
-    )
+      assert unifRes.isSome()
 
-    assert unifRes.isSome()
+      let res = unifRes.get()
+      echo res.exprRepr()
+      cmpTerm res["@a"], nList(@[nconst 1, nconst 2, nconst 3])
 
-    let res = unifRes.get()
-    echo res.exprRepr()
+    if false:
+      let interm: Trm = nT(nt 1, nt 2, nt 3, nt 4)
+      let pattern: TrmTerm =
+        nOp(
+          makePattern(
+              makeZeroOrMoreP(
+                makeAndP(@[
+                  makeTermP nVar("a", islist = true),
+                  makeTermP nVar("b", islist = true)
+                ])
+              ), fullMatch = true))
 
-    cmpTerm res["@a"], nList(@[nconst 2, nconst 4, nconst 8])
-    cmpTerm res["@b"], nList(@[nconst 3, nconst 9, nconst 27])
-    cmpTerm res["c"], nconst(90)
+      let unifRes = unif(interm.toTerm(), pattern)
+
+      assert unifRes.isSome()
+
+      let res = unifRes.get()
+      echo res.exprRepr()
+      cmpTerm res["@a"], nList(@[nconst 1, nconst 3])
+      cmpTerm res["@b"], nList(@[nconst 2, nconst 4])
+
+    block:
+      let interm: Trm = nT(
+        nT(nT(2), nT(3)),
+        nT(nT(4), nT(9)),
+        nT(nT(8), nT(27)),
+        nT(90)
+      )
+
+      let pattern: TrmTerm =
+        nOp( # `Op( *Op(@a, @b) & c )`
+          makePattern( # `*Op(@a, @b) & c`
+            makeAndP(@[
+              makeZeroOrMoreP( # `*Op(@a, @b)`
+                makeTermP nOp( # `Op(@a, @b)`
+                  nVar("a", islist = true), # `@a`
+                  nVar("b", islist = true)  # `@b`
+                )
+              ),
+              makeTermP nVar("c", islist = false) # `c`
+            ]),
+            fullMatch = true))
+
+      let unifRes = unif(interm.toTerm(), pattern)
+      echo pattern.exprRepr()
+
+      assert unifRes.isSome()
+
+      let res = unifRes.get()
+      echo res.exprRepr()
+
+      cmpTerm res["@a"], nList(@[nconst 2, nconst 4, nconst 8])
+      cmpTerm res["@b"], nList(@[nconst 3, nconst 9, nconst 27])
+      cmpTerm res["c"], nconst(90)
 
 
 suite "Nim trs reduction rule search":

@@ -626,7 +626,7 @@ template getValImpl(): untyped {.dirty.} =
   except KeyError:
     # TODO check if `VarSym` can be converter to string
     # TODO use define to constrol exception verbosity
-    let vars = e.mapPairs($lhs).joinq()
+    let vars = e.mapPairs(lhs.exprRepr()).joinq()
     raise newException(
       KeyError,
       &"Missing variable `{t}` in environment. Have vars: {vars}")
@@ -834,14 +834,13 @@ func derefOrDefault*[V, F](
 
 
 func unif*[V, F](
-  t1, t2: Term[V, F],
-  env: TermEnv[V, F] = makeEnvironment[V, F]()): Option[TermEnv[V, F]]
+  t1, t2: Term[V, F], env: TermEnv[V, F]): Option[TermEnv[V, F]]
 
 func partialMatch[V, F](
   elems: seq[Term[V, F]],
   startpos: int,
   patt: TermPattern[V, F],
-  env: TermEnv[V, F] = makeEnvironment[V, F]()
+  env: TermEnv[V, F]
      ): tuple[env: Option[TermEnv[V, F]], shift: int] =
   ## Apply pattern `patt` to subsequence `elems[startpos .. ^1]` and
   ## return match end position + updated environment. If match is
@@ -879,13 +878,13 @@ func partialMatch[V, F](
         of tkPlaceholder:
           inc pos
         of tkConstant:
-          let res = unif(term, elems[pos])
+          let res = unif(term, elems[pos], env)
           if res.isSome():
             inc pos
           else:
             return noRes
         of tkFunctor:
-          iflet (env = unif(term, elems[pos])):
+          iflet (env = unif(term, elems[pos], env)):
             inc pos
           else:
             return noRes
@@ -907,12 +906,28 @@ func partialMatch[V, F](
         let (resenv, endpos) = partialMatch(
           elems, pos, patt.patt.getIt(), env)
 
-        if resenv.isSome():
-          env = resenv.get()
+        iflet (env = resenv):
           pos = endpos
-        else: # 0+ - always succeds in unification, possibly not
-              # producing any shift
+        else:
           break
+
+        # let optValue = resenv
+        # block:
+        #   if isSome(resenv):
+        #     env = get(resenv)
+        #     pos = endpos
+        #     echov "asdfasdfas"
+        #   else:
+        #     break
+
+
+        # if resenv.isSome():
+        # # echov resend.get()
+        #   env = resenv.get()
+        #   pos = endpos
+        # else: # 0+ - always succeds in unification, possibly not
+        #       # producing any shift
+        #   break
     of tpkOptional:
       let (resenv, endpos) = partialMatch(
         elems, pos, patt.patt.getIt(), env)
@@ -964,9 +979,70 @@ func unif*[V, F](elems: seq[Term[V, F]],
 
     return some(env)
 
+func unifLists*[V, F](elems1, elems2: seq[Term[V, F]],
+                      env: TermEnv[V, F]): Option[TermEnv[V, F]] =
+  mixin exprRepr
+  var
+    tmpRes = env
+    idx1 = 0
+    idx2 = 0
+
+  while (idx1 < elems1.len) and (idx2 < elems2.len):
+    let
+      el1 = elems1[idx1]
+      el2 = elems2[idx2]
+      ek1 = el1.getKind()
+      ek2 = el2.getKind()
+
+    debugecho "---"
+    echov idx1, el1.exprRepr(), elems1.exprRepr()
+    echov idx2, el2.exprRepr(), elems2.exprRepr()
+
+    if (ek1, ek2) == (tkPattern, tkPattern):
+      raiseAssert("#[ IMPLEMENT pattern-pattern match ]#")
+    elif ek1 == tkPattern: # Unifty list part with pattern
+      let (resenv, pos) = partialMatch(elems2, idx2, el1.getPatt(), tmpRes)
+
+      iflet (res = resenv):
+        inc idx1
+        idx2 = pos
+        echov res.exprRepr()
+        tmpres.mergeEnv res
+      else:
+        return none(TermEnv[V, F])
+
+    elif ek2 == tkPattern:
+      let (resenv, pos) = partialMatch(elems1, idx1, el2.getPatt(), tmpRes)
+
+      iflet (res = resenv):
+        inc idx2
+        idx1 = pos
+        echov res.exprRepr()
+        tmpres.mergeEnv res
+      else:
+        return none(TermEnv[V, F])
+    else:
+      iflet (res = unif(el1, el2, tmpres)): # Unift two elements directly
+        inc idx1
+        inc idx2
+        tmpres.mergeEnv res
+      else:
+        return none(TermEnv[V, F])
+
+    echov tmpres.exprRepr()
+
+  if (idx1 < elems1.len) or (idx2 < elems2.len): # Not full match
+    # on either of patterns
+    echov idx1
+    echov idx2
+    echov "fail", idx1, idx2
+    return none(TermEnv[V, F])
+  else:
+    echov "res:", tmpres.exprRepr()
+    return some(tmpRes)
+
 func unif*[V, F](
-  t1, t2: Term[V, F],
-  env: TermEnv[V, F] = makeEnvironment[V, F]()): Option[TermEnv[V, F]] =
+  t1, t2: Term[V, F], env: TermEnv[V, F]): Option[TermEnv[V, F]] =
   ## Attempt to unify two terms. On success substitution (environment)
   ## is return for which two terms `t1` and `t2` could be considered
   ## equal.
@@ -992,78 +1068,7 @@ func unif*[V, F](
     assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
     assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
     if (k1, k2) == (tkList, tkList): # list-list unification
-      # if val1.getElements().len != val2.getElements().len:
-      #   # debugecho "DIfferent list len"
-      #   return none(TermEnv[V, F])
-
-      var
-        tmpRes = env
-        idx1 = 0
-        idx2 = 0
-
-      let
-        elems1 = val1.getElements()
-        elems2 = val2.getElements()
-
-      while (idx1 < elems1.len) and (idx2 < elems2.len):
-        echov tmpres.exprRepr()
-        let
-          el1 = elems1[idx1]
-          el2 = elems2[idx2]
-          ek1 = el1.getKind()
-          ek2 = el2.getKind()
-
-        if (ek1, ek2) == (tkPattern, tkPattern):
-          raiseAssert("#[ IMPLEMENT pattern-pattern match ]#")
-        elif ek1 == tkPattern: # Unifty list part with pattern
-          let (resenv, newpos) = partialMatch(
-            elems2, idx2, el1.getPatt(), tmpRes)
-
-          iflet (res = resenv):
-            inc idx1
-            idx2 = newpos
-            tmpres.mergeEnv res
-          else:
-            return none(TermEnv[V, F])
-
-        elif ek2 == tkPattern:
-          let (resenv, newpos) = partialMatch(
-            elems1, idx1, el2.getPatt(), tmpRes)
-
-          iflet (res = resenv):
-            inc idx2
-            idx1 = newpos
-            tmpres.mergeEnv res
-          else:
-            return none(TermEnv[V, F])
-        else:
-          debugecho "---"
-          # echov val1.exprRepr()
-          echov el1.exprRepr()
-          # echov val2.exprRepr()
-          echov el2.exprRepr()
-          iflet (res = unif(el1, el2)): # Unift two elements directly
-            inc idx1
-            inc idx2
-            tmpres = res
-          else:
-            return none(TermEnv[V, F])
-
-      if (idx1 < elems1.len) or (idx2 < elems2.len): # Not full match
-        # on either of patterns
-        echov idx1
-        echov idx2
-        return none(TermEnv[V, F])
-      else:
-        return some(tmpRes)
-
-      # for idx, (el1, el2) in zip(getElements(val1), getElements(val2)):
-      #   let res = unif(el1, el2, tmpRes)
-      #   if res.isSome():
-      #     tmpRes = res.get()
-      #   else:
-      #     return none(TermEnv[V, F])
-
+      return unifLists(val1.getElements(), val2.getElements(), env)
     else: # list-pattern unfification
       if k1 == tkList: # k2 is pattern
         return val1.getElements().unif(val2.pattern, env, val2.fullMatch)
@@ -1089,7 +1094,7 @@ func unif*[V, F](
     if getFSym(val1) != getFSym(val2):
       return none(TermEnv[V, F])
 
-    return unif(val1.getArgumentList(), val2.getArgumentList())
+    return unif(val1.getArgumentList(), val2.getArgumentList(), env)
     # if getArguments(val1).len != getArguments(val2).len:
     #   # TEST with different-sized term unification
     #   # TODO provide `reason` for failure
