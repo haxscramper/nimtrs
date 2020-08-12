@@ -452,6 +452,38 @@ suite "Pattern matching":
       cmpTerm res["c"], nconst(90)
 
 
+    block:
+
+      let pattern: TrmTerm =
+        nOp( # `Op( *Op(a, b) )`
+          makePattern( # `*Op(a, b)`
+            makeZeroOrMoreP( # `*Op(a, b)`
+              makeTermP nOp( # `Op(a, b)`
+                nVar("a", islist = false), # `a`
+                nVar("b", islist = false)  # `b`
+              )
+            ),
+            fullMatch = true))
+
+      block:
+        let interm: Trm = nT(nT(nT(2), nT(3)), nT(nT(2), nT(3)),)
+        let unifRes = unif(interm.toTerm(), pattern)
+        assert unifRes.isSome()
+        let res = unifRes.get()
+
+        cmpTerm res["a"], nconst 2
+        cmpTerm res["b"], nconst 3
+
+      block:
+        let interm: Trm = nT(
+          nT(nT(2), nT(3) #[ first binding for `a` ]#),
+          nT(nT(2), nT(4) #[ second bindin for `a` - will fail because
+                          #`3 != 4` ]#)
+        )
+        let unifRes = unif(interm.toTerm(), pattern)
+        assert unifRes.isNone()
+
+
 suite "Nim trs reduction rule search":
   test "Rewrite constant":
     let (term, ok, _) = nConst(12).reduce(makeSystem({
