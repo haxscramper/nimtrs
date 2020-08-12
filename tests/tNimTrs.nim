@@ -379,7 +379,7 @@ suite "Pattern matching":
     )
 
   test "Extract from functor arguments":
-    if false:
+    if true:
       let interm: Trm = nT(nt 1, nt 2, nt 3)
       let pattern: TrmTerm =
         nOp(
@@ -396,7 +396,7 @@ suite "Pattern matching":
       echo res.exprRepr()
       cmpTerm res["@a"], nList(@[nconst 1, nconst 2, nconst 3])
 
-    if false:
+    if true:
       let interm: Trm = nT(nt 1, nt 2, nt 3, nt 4)
       let pattern: TrmTerm =
         nOp(
