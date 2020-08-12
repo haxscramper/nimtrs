@@ -805,6 +805,7 @@ func bindTerm[V, F](variable, value: Term[V, F], env: TermEnv[V, F]): TermEnv[V,
   result = env
   case getKind(value):
     of tkConstant, tkVariable, tkPlaceholder, tkList, tkPattern:
+      result.appendOrUnif(variable, value)
       result[getVName(variable)] = value
     of tkFunctor:
       let (newTerm, newEnv) = value.copy(env)
@@ -834,14 +835,14 @@ func derefOrDefault*[V, F](
 
 
 func unif*[V, F](
-  t1, t2: Term[V, F], env: TermEnv[V, F]): Option[TermEnv[V, F]]
+  t1, t2: Term[V, F], env: TermEnv[V, F], level: int): Option[TermEnv[V, F]]
 
 func partialMatch[V, F](
   elems: seq[Term[V, F]],
   startpos: int,
   patt: TermPattern[V, F],
-  env: TermEnv[V, F]
-     ): tuple[env: Option[TermEnv[V, F]], shift: int] =
+  env: TermEnv[V, F],
+  level: int): tuple[env: Option[TermEnv[V, F]], shift: int] =
   ## Apply pattern `patt` to subsequence `elems[startpos .. ^1]` and
   ## return match end position + updated environment. If match is
   ## unsuccesful return `startpos` and `none` env, otherwise return
@@ -866,6 +867,9 @@ func partialMatch[V, F](
 
 
   mixin exprRepr
+  plog:
+    echoi level, &"{elems[pos..^1].exprRepr()} {patt.exprRepr()}"
+
   case patt.kind:
     of tpkTerm:
       let term = patt.term.getIt()
@@ -878,13 +882,13 @@ func partialMatch[V, F](
         of tkPlaceholder:
           inc pos
         of tkConstant:
-          let res = unif(term, elems[pos], env)
+          let res = unif(term, elems[pos], env, level + 1)
           if res.isSome():
             inc pos
           else:
             return noRes
         of tkFunctor:
-          iflet (env = unif(term, elems[pos], env)):
+          iflet (env = unif(term, elems[pos], env, level + 1)):
             inc pos
           else:
             return noRes
@@ -892,7 +896,8 @@ func partialMatch[V, F](
           raiseAssert(&"#[ IMPLEMENT {getKind(term)} ]#")
     of tpkConcat:
       for subpatt in patt.patterns:
-        let (resenv, endpos) = partialMatch(elems, pos, subpatt, env)
+        let (resenv, endpos) = partialMatch(
+          elems, pos, subpatt, env, level + 1)
 
         if resenv.isSome():
           env = resenv.get()
@@ -904,33 +909,17 @@ func partialMatch[V, F](
     of tpkZeroOrMore:
       while true:
         let (resenv, endpos) = partialMatch(
-          elems, pos, patt.patt.getIt(), env)
+          elems, pos, patt.patt.getIt(), env, level + 1)
 
-        iflet (env = resenv):
+        iflet (tmp = resenv):
+          env.mergeEnv tmp
           pos = endpos
-        else:
+        else: # 0+ - always succeds in unification, possibly not
+              # producing any shift
           break
-
-        # let optValue = resenv
-        # block:
-        #   if isSome(resenv):
-        #     env = get(resenv)
-        #     pos = endpos
-        #     echov "asdfasdfas"
-        #   else:
-        #     break
-
-
-        # if resenv.isSome():
-        # # echov resend.get()
-        #   env = resenv.get()
-        #   pos = endpos
-        # else: # 0+ - always succeds in unification, possibly not
-        #       # producing any shift
-        #   break
     of tpkOptional:
       let (resenv, endpos) = partialMatch(
-        elems, pos, patt.patt.getIt(), env)
+        elems, pos, patt.patt.getIt(), env, level + 1)
 
       if resenv.isSome():
         env = resenv.get()
@@ -938,18 +927,21 @@ func partialMatch[V, F](
     else:
       raiseAssert("#[ IMPLEMENT ]#")
 
+  plog:
+    echoi level, baseenv.exprRepr(), " -> ", env.exprRepr()
   return (some(env), pos)
 
 func unif*[V, F](elems: seq[Term[V, F]],
                  patt: TermPattern[V, F],
                  env: TermEnv[V, F] = makeEnvironment[V, F](),
+                 level: int,
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
   ## Unify `patt` to elements in `elems` using environment `env`. If
   ## `fullMatch` is true yield some() environment only if input
   ## sequence matcher completely. Otherwise repeatedly apply pattern
   ## on sequence.
   if fullMatch:
-    let (resenv, endpos) = partialMatch(elems, 0, patt, env)
+    let (resenv, endpos) = partialMatch(elems, 0, patt, env, level + 1)
     if endpos != elems.len:
       return none(TermEnv[V, F]) # Not matched full pattern
     else:
@@ -962,7 +954,7 @@ func unif*[V, F](elems: seq[Term[V, F]],
       # NOTE for now I will assum passing sublist is really cheap. If
       # not - will use linked list or something like that.
       # echov pos
-      let (resenv, endpos) = partialMatch(elems, pos, patt, env)
+      let (resenv, endpos) = partialMatch(elems, pos, patt, env, level + 1)
       if resenv.isSome():
         # echov resenv.get().exprRepr()
         if endpos == pos: # null match - return immediately (next
@@ -979,9 +971,14 @@ func unif*[V, F](elems: seq[Term[V, F]],
 
     return some(env)
 
-func unifLists*[V, F](elems1, elems2: seq[Term[V, F]],
-                      env: TermEnv[V, F]): Option[TermEnv[V, F]] =
+func unifLists*[V, F](
+  elems1, elems2: seq[Term[V, F]],
+  env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
   mixin exprRepr
+  plog:
+    echoi level, elems1.exprRepr(), "=", elems2.exprRepr()
+
+
   var
     tmpRes = env
     idx1 = 0
@@ -994,55 +991,63 @@ func unifLists*[V, F](elems1, elems2: seq[Term[V, F]],
       ek1 = el1.getKind()
       ek2 = el2.getKind()
 
-    debugecho "---"
-    echov idx1, el1.exprRepr(), elems1.exprRepr()
-    echov idx2, el2.exprRepr(), elems2.exprRepr()
+    # debugecho "---"
+    # echov idx1, el1.exprRepr(), elems1.exprRepr()
+    # echov idx2, el2.exprRepr(), elems2.exprRepr()
 
     if (ek1, ek2) == (tkPattern, tkPattern):
       raiseAssert("#[ IMPLEMENT pattern-pattern match ]#")
     elif ek1 == tkPattern: # Unifty list part with pattern
-      let (resenv, pos) = partialMatch(elems2, idx2, el1.getPatt(), tmpRes)
+      let (resenv, pos) = partialMatch(
+        elems2, idx2, el1.getPatt(), tmpRes, level + 1)
 
       iflet (res = resenv):
         inc idx1
         idx2 = pos
-        echov res.exprRepr()
+        # echov res.exprRepr()
         tmpres.mergeEnv res
       else:
         return none(TermEnv[V, F])
 
     elif ek2 == tkPattern:
-      let (resenv, pos) = partialMatch(elems1, idx1, el2.getPatt(), tmpRes)
+      let (resenv, pos) = partialMatch(
+        elems1, idx1, el2.getPatt(), tmpRes, level + 1)
 
       iflet (res = resenv):
         inc idx2
         idx1 = pos
-        echov res.exprRepr()
+        # echov res.exprRepr()
         tmpres.mergeEnv res
       else:
         return none(TermEnv[V, F])
     else:
-      iflet (res = unif(el1, el2, tmpres)): # Unift two elements directly
+      iflet (res = unif(el1, el2, tmpres, level + 1)): # Unift two elements directly
         inc idx1
         inc idx2
         tmpres.mergeEnv res
       else:
         return none(TermEnv[V, F])
 
-    echov tmpres.exprRepr()
-
   if (idx1 < elems1.len) or (idx2 < elems2.len): # Not full match
     # on either of patterns
-    echov idx1
-    echov idx2
-    echov "fail", idx1, idx2
+    # echov idx1
+    # echov idx2
+    # echov "fail", idx1, idx2
     return none(TermEnv[V, F])
   else:
-    echov "res:", tmpres.exprRepr()
+    # echov "res:", tmpres.exprRepr()
     return some(tmpRes)
 
+  plog:
+    defer:
+      if result.isSome():
+        echoi level, result.get().exprRepr()
+      else:
+        echoi level, "list unification failed"
+
+
 func unif*[V, F](
-  t1, t2: Term[V, F], env: TermEnv[V, F]): Option[TermEnv[V, F]] =
+  t1, t2: Term[V, F], env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
   ## Attempt to unify two terms. On success substitution (environment)
   ## is return for which two terms `t1` and `t2` could be considered
   ## equal.
@@ -1053,27 +1058,39 @@ func unif*[V, F](
     k1 = getKind(val1)
     k2 = getKind(val2)
 
+  plog:
+    echoi level, val1.exprRepr(), val2.exprRepr()
+
   if k1 == tkConstant and k2 == tkConstant:
     if val1 == val2:
-      return some(env)
+      result = some(env)
     else:
-      return none(TermEnv[V, F])
+      result = none(TermEnv[V, F])
   elif k1 == tkVariable:
-    return some(bindTerm(val1, val2, env))
+    # result = some(bindTerm(val1, val2, env))
+    result = some(env)
+    if not result.get().appendOrUnif(val1.getVName(), val2):
+      return none(TermEnv[V, F])
   elif k2 == tkVariable:
-    return some(bindTerm(val2, val1, env))
+    result = some(env)
+    if not result.get().appendOrUnif(val2.getVName(), val1):
+      return none(TermEnv[V, F])
+    # result = some(bindTerm(val2, val1, env))
   elif (k1, k2) in @[(tkConstant, tkFunctor), (tkFunctor, tkConstant)]:
-    return none(TermEnv[V, F])
+    result = none(TermEnv[V, F])
   elif k1 in {tkList, tkPattern}:
     assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
     assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
     if (k1, k2) == (tkList, tkList): # list-list unification
-      return unifLists(val1.getElements(), val2.getElements(), env)
+      result = unifLists(
+        val1.getElements(), val2.getElements(), env, level + 1)
     else: # list-pattern unfification
       if k1 == tkList: # k2 is pattern
-        return val1.getElements().unif(val2.pattern, env, val2.fullMatch)
+        result = val1.getElements().unif(
+          val2.pattern, env, level + 1, val2.fullMatch)
       else: # k1 is pattern
-        return val2.getElements().unif(val1.pattern, env, val1.fullMatch)
+        result = val2.getElements().unif(
+          val1.pattern, env, level + 1, val1.fullMatch)
       # for elem in t1.
   else:
     if (k1 == tkFunctor) and (k2 != tkFunctor) or
@@ -1092,9 +1109,10 @@ func unif*[V, F](
     # echov val1.exprRepr()
     # echov val2.exprRepr()
     if getFSym(val1) != getFSym(val2):
-      return none(TermEnv[V, F])
+      result = none(TermEnv[V, F])
 
-    return unif(val1.getArgumentList(), val2.getArgumentList(), env)
+    result = unif(
+      val1.getArgumentList(), val2.getArgumentList(), env, level + 1)
     # if getArguments(val1).len != getArguments(val2).len:
     #   # TEST with different-sized term unification
     #   # TODO provide `reason` for failure
@@ -1108,6 +1126,13 @@ func unif*[V, F](
     #     return none(TermEnv[V, F])
 
     # return some(tmpRes)
+
+  plog:
+    if result.isSome():
+      echoi level, result.get().exprRepr()
+    else:
+      echoi level, "unification failed"
+
 
 iterator redexes*[V, F](
   term: Term[V, F], ): tuple[red: Term[V, F], path: TreePath] =

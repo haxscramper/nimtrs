@@ -6,7 +6,7 @@ import nimtrs/[trscore, trspprint]
 
 
 func unif*[V, F](t1, t2: Term[V, F]): Option[TermEnv[V, F]] =
-  unif(t1, t2, makeEnvironment[V, F]())
+  unif(t1, t2, makeEnvironment[V, F](), 0)
 
 type
   TrmKind = enum
