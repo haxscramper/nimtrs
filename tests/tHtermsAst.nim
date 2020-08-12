@@ -2,7 +2,7 @@ import hmisc/helpers
 import nimtrs/[trscore, trspprint]
 import sequtils, strformat, strutils
 import hmisc/algo/halgorithm
-import unittest, sets
+import unittest, sets, options
 
 type
   AstKind = enum

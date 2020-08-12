@@ -1184,7 +1184,7 @@ func appendOrUnif*[V, F](env: var TermEnv[V, F],
       env[vsym].addElement value
       return true
     else:
-      return unif(env[vsym], value).isSome()
+      return unif(env[vsym], value, makeEnvironment[V, F](), 0).isSome()
   else:
     if vsym.isList:
       env[vsym] = makeList(@[value])
@@ -1205,7 +1205,7 @@ func match*[V, F](redex: Term[V, F], matcher: TermMatcher[V, F]): Option[TermEnv
   # matches that are not terms.
   let unifRes =
     if matcher.isPattern:
-      unif(matcher.patt, redex)
+      unif(matcher.patt, redex, makeEnvironment[V, F](), 0)
     else:
       matcher.matcher(redex)
 
