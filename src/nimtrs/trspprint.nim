@@ -51,14 +51,17 @@ proc treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
 proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
   case term.getKind():
     of tkPattern:
-      raiseAssert("#[ IMPLEMENT ]#")
+      term.getPatt().exprRepr(cb)
+# proc exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+      # raiseAssert("#[ IMPLEMENT ]#")
     of tkList:
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
     of tkConstant:
       "'" & cb.valStrGen(term.getValue()) & "'"
     of tkVariable:
-      debugecho term
-      tern(term.listvarp, "@", "_") & $term.getVName()
+      # debugecho term
+      # tern(term.listvarp, "@", "_") &
+        term.getVName().exprRepr()
     of tkFunctor:
       if ($getSym(term)).validIdentifier():
         $getSym(term) & "(" & term.getArguments().mapIt(it.exprRepr(cb)).join(", ") & ")"

@@ -369,6 +369,41 @@ suite "Pattern matching":
       }
     )
 
+  test "Extract from functor arguments":
+    let interm: Trm = nT(
+      nT(nT(2), nT(3)),
+      nT(nT(4), nT(9)),
+      nT(nT(8), nT(27)),
+      nT(90)
+    )
+
+    let pattern: TrmTerm =
+      nOp( # `Op( *Op(@a, @b) & c )`
+        makePattern( # `*Op(@a, @b) & c`
+          makeAndP(@[
+            makeZeroOrMoreP( # `*Op(@a, @b)`
+              makeTermP nOp( # `Op(@a, @b)`
+                nVar("a", islist = true), # `@a`
+                nVar("b", islist = true)  # `@b`
+              )
+            ),
+            makeTermP nVar("c", islist = false) # `c`
+          ]),
+          fullMatch = true))
+
+    let unifRes = unif(
+      interm.toTerm(),
+      pattern
+    )
+
+    assert unifRes.isSome()
+
+    let res = unifRes.get()
+
+    cmpTerm res["@a"], nList(@[nconst 2, nconst 4, nconst 8])
+    cmpTerm res["@b"], nList(@[nconst 3, nconst 9, nconst 27])
+    cmpTerm res["c"], nconst(90)
+
 
 suite "Nim trs reduction rule search":
   test "Rewrite constant":

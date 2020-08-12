@@ -7,6 +7,7 @@ import deques, intsets, sets
 export tables, intsets
 
 import hmisc/types/[htrie, hprimitives]
+import hmisc/macros/iflet
 import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
 import hmisc/[helpers, hexceptions]
 
@@ -357,6 +358,10 @@ func getNth*[V, F](
   else:
     return t.arguments.getIt().elements[idx]
 
+func getPatt*[V, F](t: Term[V, F]): TermPattern[V, F] =
+  assert t.tkind == tkPattern
+  t.pattern
+
 func getNthMod*[V, F](
   t: var Term[V, F], idx: int): var Term[V, F] =
   ## Get mutable value of [`idx`] element in list or functor arguments
@@ -374,7 +379,7 @@ func getArguments*[V, F](t: Term[V, F]): seq[Term[V, F]] =
 
 func getArgumentList*[V, F](t: Term[V, F]): Term[V, F] =
   ## Get functor arguments as a term
-  assert t.getKind() == tkList
+  assert t.getKind() == tkFunctor
   t.arguments.getIt()
 
 func getElements*[V, F](t: Term[V, F]): seq[Term[V, F]] =
@@ -879,8 +884,13 @@ func partialMatch[V, F](
             inc pos
           else:
             return noRes
+        of tkFunctor:
+          iflet (env = unif(term, elems[pos])):
+            inc pos
+          else:
+            return noRes
         else:
-          raiseAssert("#[ IMPLEMENT ]#")
+          raiseAssert(&"#[ IMPLEMENT {getKind(term)} ]#")
     of tpkConcat:
       for subpatt in patt.patterns:
         let (resenv, endpos) = partialMatch(elems, pos, subpatt, env)
@@ -960,6 +970,7 @@ func unif*[V, F](
   ## Attempt to unify two terms. On success substitution (environment)
   ## is return for which two terms `t1` and `t2` could be considered
   ## equal.
+  mixin exprRepr
   let
     val1 = dereference(t1, env)
     val2 = dereference(t2, env)
@@ -981,19 +992,75 @@ func unif*[V, F](
     assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
     assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
     if (k1, k2) == (tkList, tkList): # list-list unification
-      if val1.getElements().len != val2.getElements().len:
-        # debugecho "DIfferent list len"
-        return none(TermEnv[V, F])
+      # if val1.getElements().len != val2.getElements().len:
+      #   # debugecho "DIfferent list len"
+      #   return none(TermEnv[V, F])
 
-      var tmpRes = env
-      for idx, (el1, el2) in zip(getElements(val1), getElements(val2)):
-        let res = unif(el1, el2, tmpRes)
-        if res.isSome():
-          tmpRes = res.get()
+      var
+        tmpRes = env
+        idx1 = 0
+        idx2 = 0
+
+      let
+        elems1 = val1.getElements()
+        elems2 = val2.getElements()
+
+      while (idx1 < elems1.len) and (idx2 < elems2.len):
+        let
+          el1 = elems1[idx1]
+          el2 = elems2[idx2]
+          ek1 = el1.getKind()
+          ek2 = el2.getKind()
+
+        if (ek1, ek2) == (tkPattern, tkPattern):
+          raiseAssert("#[ IMPLEMENT pattern-pattern match ]#")
+        elif ek1 == tkPattern: # Unifty list part with pattern
+          let (resenv, newpos) = partialMatch(
+            elems2, idx2, el1.getPatt(), tmpRes)
+
+          iflet (tmpres = resenv):
+            inc idx1
+            idx2 = newpos
+          else:
+            return none(TermEnv[V, F])
+
+        elif ek2 == tkPattern:
+          let (resenv, newpos) = partialMatch(
+            elems1, idx1, el2.getPatt(), tmpRes)
+
+          iflet (tmpres = resenv):
+            inc idx2
+            idx1 = newpos
+          else:
+            return none(TermEnv[V, F])
         else:
-          return none(TermEnv[V, F])
+          debugecho "---"
+          # echov val1.exprRepr()
+          echov el1.exprRepr()
+          # echov val2.exprRepr()
+          echov el2.exprRepr()
+          iflet (res = unif(el1, el2)): # Unift two elements directly
+            inc idx1
+            inc idx2
+            tmpres = res
+          else:
+            return none(TermEnv[V, F])
 
-      return some(tmpRes)
+      if (idx1 < elems1.len) or (idx2 < elems2.len): # Not full match
+        # on either of patterns
+        echov idx1
+        echov idx2
+        return none(TermEnv[V, F])
+      else:
+        return some(tmpRes)
+
+      # for idx, (el1, el2) in zip(getElements(val1), getElements(val2)):
+      #   let res = unif(el1, el2, tmpRes)
+      #   if res.isSome():
+      #     tmpRes = res.get()
+      #   else:
+      #     return none(TermEnv[V, F])
+
     else: # list-pattern unfification
       if k1 == tkList: # k2 is pattern
         return val1.getElements().unif(val2.pattern, env, val2.fullMatch)
@@ -1001,23 +1068,38 @@ func unif*[V, F](
         return val2.getElements().unif(val1.pattern, env, val1.fullMatch)
       # for elem in t1.
   else:
-    var tmpRes = env
+    if (k1 == tkFunctor) and (k2 != tkFunctor) or
+       (k2 == tkFunctor) and (k1 != tkFunctor):
+      debugecho "<<< ||| >>>"
+      echov val1.exprRepr()
+      echov val2.exprRepr()
+
+      raiseAssert(msgjoin(
+        "Cannot unify functor and non-functor directly. K1 is ", k1,
+        " and K2 is ", k2
+      ))
+
+    # if (k1, k2) in [(tkFunctor, )]
+    # var tmpRes = env
+    # echov val1.exprRepr()
+    # echov val2.exprRepr()
     if getFSym(val1) != getFSym(val2):
       return none(TermEnv[V, F])
 
-    if getArguments(val1).len != getArguments(val2).len:
-      # TEST with different-sized term unification
-      # TODO provide `reason` for failure
-      return none(TermEnv[V, F])
+    return unif(val1.getArgumentList(), val2.getArgumentList())
+    # if getArguments(val1).len != getArguments(val2).len:
+    #   # TEST with different-sized term unification
+    #   # TODO provide `reason` for failure
+    #   return none(TermEnv[V, F])
 
-    for idx, (arg1, arg2) in zip(getArguments(val1), getArguments(val2)):
-      let res = unif(arg1, arg2, tmpRes)
-      if res.isSome():
-        tmpRes = res.get()
-      else:
-        return none(TermEnv[V, F])
+    # for idx, (arg1, arg2) in zip(getArguments(val1), getArguments(val2)):
+    #   let res = unif(arg1, arg2, tmpRes)
+    #   if res.isSome():
+    #     tmpRes = res.get()
+    #   else:
+    #     return none(TermEnv[V, F])
 
-    return some(tmpRes)
+    # return some(tmpRes)
 
 iterator redexes*[V, F](
   term: Term[V, F], ): tuple[red: Term[V, F], path: TreePath] =
