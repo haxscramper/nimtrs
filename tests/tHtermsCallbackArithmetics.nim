@@ -48,7 +48,7 @@ proc `$`*(term: Arithm): string =
           else:
             symName & "(" & term.tsubt.mapIt($it).join(", ") & ")"
 
-type ATerm = Term[Arithm, ArithmOp]
+type ATerm* = Term[Arithm, ArithmOp]
 
 func nOp*(op: ArithmOp, subt: seq[ATerm]): ATerm =
   makeFunctor[Arithm, ArithmOp](op, subt)

@@ -246,6 +246,9 @@ proc cannotUse(rs: ReductionState, path: TreePath, rule: RuleId): bool =
 func makeVarSym*(name: string, islist: bool): VarSym =
   VarSym(name: name, islist: islist)
 
+func initVarSym*(name: string, islist: bool): VarSym =
+  VarSym(name: name, islist: islist)
+
 func parseVarSym*(str: string): VarSym =
   if str[0] == '@': makeVarSym(str[1..^1], true)
   elif str[0] == '$': makeVarSym(str[1..^1], false)
@@ -274,6 +277,9 @@ func makeFunctor*[V, F](
   Term[V, F](tkind: tkFunctor,
              functor: sym,
              arguments: makeList(subt).mkIt())
+
+func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
+  makeFunctor(sym, toSeq(subt))
 
 func makePattern*[V, F](patt: TermPattern[V, F],
                         fullMatch: bool): Term[V, F] =
@@ -618,6 +624,9 @@ func makeReductionSystem*[V, F](
   for fsym, rules in result.first:
     result.first[fsym] = rules.deduplicate()
 
+func makeReductionSystem*[V, F](
+  args: varargs[RulePair[V, F]]): RedSystem[V, F] =
+  makeReductionSystem(toSeq(args))
 
 
 func isBound*[V, F](env: TermEnv[V, F], term: VarSym): bool =
