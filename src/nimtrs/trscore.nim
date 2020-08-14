@@ -248,6 +248,7 @@ func makeVarSym*(name: string, islist: bool): VarSym =
 
 func parseVarSym*(str: string): VarSym =
   if str[0] == '@': makeVarSym(str[1..^1], true)
+  elif str[0] == '$': makeVarSym(str[1..^1], false)
   else: makeVarSym(str, false)
 
 func makePlaceholder*[V, F](): Term[V, F] =

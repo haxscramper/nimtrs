@@ -14,9 +14,9 @@ suite "DSL":
     ]).toTerm(arithmImpl)
 
 
-    termMatch("aop", term):
-      Plus(a, 0) => a
-      Plus(a, Succ(b)) => Succ(a, b)
-      Mult(a, 0) => 0
-      Mult(a, Succ(b)) => Plus(a, Mult(a, b))
+    initTRS("aop", term, arithmImpl):
+      Plus($a, 0) => $a
+      Plus($a, Succ($b)) => Succ($a, $b)
+      Mult($a, 0) => 0
+      Mult($a, Succ($b)) => Plus($a, Mult($a, $b))
       _ => 0
