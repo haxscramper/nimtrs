@@ -1100,6 +1100,14 @@ func unif*[V, F](
     else:
       echoi level, "unification failed"
 
+template unifp*[V, F](t1, t2: Term[V, F]): untyped =
+  var env {.inject.}: TermEnv[V, F]
+  let unifRes = unif(t1, t2, makeEnvironment[V, F](), 0)
+  if unifRes.isSome():
+    env = unifRes.get()
+    true
+  else:
+    false
 
 iterator redexes*[V, F](
   term: Term[V, F], ): tuple[red: Term[V, F], path: TreePath] =

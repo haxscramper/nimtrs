@@ -1,6 +1,6 @@
 import sugar, strutils, sequtils, strformat, sets, options
 import hmisc/[helpers]
-import nimtrs/[trscore, trspprint]
+import nimtrs/[trscore, trspprint, trsdsl]
 
 #===========================  implementation  ============================#
 
@@ -216,6 +216,18 @@ suite "Nim trs primitives":
 
        cmpTerm res["ii"], nConst(90)
        cmpTerm res["io"], nConst(8)
+
+  test "{unifp} template":
+    if unifp(nVar("ii"), nConst(nT(12))):
+      cmpTerm env["ii"], nConst(nT(12))
+      static:
+        assert declared(env)
+        assert env is TrmEnv
+    else:
+      static:
+        assert not declared(env)
+
+      fail()
 
   test "List unification test":
     let res = unif(

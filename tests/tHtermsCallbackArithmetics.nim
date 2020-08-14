@@ -4,14 +4,14 @@ import hmisc/algo/[halgorithm, hseq_mapping]
 import strutils, sequtils, strformat, sugar, options, sets
 
 type
-  ArithmOp = enum
+  ArithmOp* = enum
     aopVal
 
     aopSucc
     aopAdd
     aopMult
 
-  Arithm = object
+  Arithm* = object
     case tsym: ArithmOp
       of aopVal:
         tval: int
@@ -50,40 +50,41 @@ proc `$`*(term: Arithm): string =
 
 type ATerm = Term[Arithm, ArithmOp]
 
-func nOp(op: ArithmOp, subt: seq[ATerm]): ATerm =
+func nOp*(op: ArithmOp, subt: seq[ATerm]): ATerm =
   makeFunctor[Arithm, ArithmOp](op, subt)
 
 func nVar(n: string): ATerm =
   makeVariable[Arithm, ArithmOp](n)
 
-func nConst(n: int): ATerm =
+func nConst*(n: int): ATerm =
   makeConstant[Arithm, ArithmOp](Arithm(tsym: aopVal, tval: n), aopVal)
 
-func mkOp(op: ArithmOp, sub: seq[Arithm]): Arithm =
+func mkOp*(op: ArithmOp, sub: seq[Arithm]): Arithm =
   case op:
     of aopVal:
       discard
     else:
       return Arithm(tsym: op, tsubt: sub)
 
-func mkVal(val: int): Arithm =
+func mkVal*(val: int): Arithm =
   Arithm(tsym: aopVal, tval: val)
+
+let arithmImpl* = TermImpl[Arithm, ArithmOp](
+  getSym: (proc(n: Arithm): ArithmOp = n.tsym),
+  isFunctorSym: (proc(n: ArithmOp): bool = (n != aopVal)),
+  makeFunctor: (
+    proc(op: ArithmOp, sub: seq[Arithm]): Arithm =
+      result = Arithm(tsym: op)
+      result.tsubt = sub
+  ),
+  getArguments: (proc(n: Arithm): seq[Arithm] = n.tsubt),
+  valStrGen: (proc(n: Arithm): string = "[[ TODO ]]"),
+)
 
 
 suite "Hterms callback/arithmetic":
   test "Arithmetic addition":
 
-    let cb = TermImpl[Arithm, ArithmOp](
-      getSym: (proc(n: Arithm): ArithmOp = n.tsym),
-      isFunctorSym: (proc(n: ArithmOp): bool = (n != aopVal)),
-      makeFunctor: (
-        proc(op: ArithmOp, sub: seq[Arithm]): Arithm =
-          result = Arithm(tsym: op)
-          result.tsubt = sub
-      ),
-      getArguments: (proc(n: Arithm): seq[Arithm] = n.tsubt),
-      valStrGen: (proc(n: Arithm): string = "[[ TODO ]]"),
-    )
 
     # assertCorrect(cb)
 
@@ -127,10 +128,10 @@ suite "Hterms callback/arithmetic":
       mkOp(aopAdd, @[
         mkOp(aopSucc, @[ mkOp(aopSucc, @[ mkVal(0) ]) ]),
         mkOp(aopSucc, @[ mkOp(aopSucc, @[ mkVal(0) ]) ])
-      ]).toTerm(cb),
+      ]).toTerm(arithmImpl),
       rSystem,
       reduceConstraints = rcNoConstraints
     )
 
-    echo $res[0].fromTerm(cb)
-    assert "S(S(S(S('0'))))" == $res[0].fromTerm(cb)
+    echo $res[0].fromTerm(arithmImpl)
+    assert "S(S(S(S('0'))))" == $res[0].fromTerm(arithmImpl)
