@@ -7,7 +7,7 @@ import deques, intsets, sets
 export tables, intsets
 
 import hmisc/types/[htrie, hprimitives]
-import hmisc/macros/iflet
+import hmisc/macros/[iflet, cl_logic]
 import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
 import hmisc/[helpers, hexceptions]
 
@@ -636,28 +636,6 @@ template getValImpl(): untyped {.dirty.} =
       &"Missing variable `{t}` in environment. Have vars: {vars}")
 
 
-macro typeCondIt*(head, body: untyped): untyped =
-  assert body.kind == nnkStmtList
-  result = nnkWhenStmt.newTree()
-  for line in body:
-    case line.kind:
-      of nnkBracket:
-        assertNodeIt(
-          line, it.len == 2, "Expected bracket with two elements")
-        let
-          ntype = line[0]
-
-        result.add nnkElifBranch.newTree(
-          nnkInfix.newTree(ident "is", ident "it", line[0]), line[1])
-      else:
-        assertNodeIt(line, false, "Expected bracket with two elements")
-
-  result.add nnkElse.newTree(head)
-
-  result = quote do:
-    block:
-      let it {.inject.} = `head`
-      `result`
 
 func getVal*[V, F](e: TermEnv[V, F], t: VarSym): Term[V, F] =
   getValImpl()
