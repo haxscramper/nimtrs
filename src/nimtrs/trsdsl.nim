@@ -146,5 +146,5 @@ macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
     implId: impl.strVal()
   ), body)
 
-  pprintCalls(result, 0)
+  # pprintCalls(result, 0)
   # colorPrint(result)

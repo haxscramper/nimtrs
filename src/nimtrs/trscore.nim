@@ -27,7 +27,7 @@ proc raiseGenEx[T](msg: string, info: T): void =
 template getGEx*[T](): untyped = cast[GenException[T]](getCurrentException())
 
 type
-  SingleIt[T] = object
+  SingleIt*[T] = object
     it: seq[T]
 
 func getIt*[T](it: SingleIt[T]): T = it.it[0]

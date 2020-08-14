@@ -7,6 +7,7 @@ import tNimTrs
 
 import hmisc/algo/[halgorithm, hseq_mapping]
 import ../src/nimtrs/[trscore, trsdsl]
+import hpprint/objdiff
 
 func toTerm*(impl: TermImpl[Arithm, ArithmOp], val: int): ATerm =
   nConst(val)
@@ -20,9 +21,12 @@ suite "DSL":
 
     let trs = initTRS("aop", arithmImpl):
       Add($a, 0) => $a
-      Add($a, Succ($b)) => Succ($a, $b)
+      Add($a, Succ($b)) => Succ(Add($a, $b))
       Mult($a, 0) => 0
       Mult($a, Succ($b)) => Add($a, Mult($a, $b))
+
+
+    # pprintCwdiff trs, rSystem
 
     echo term.fromTerm(arithmImpl)
     let res = term.reduce(trs, reduceConstraints = rcNoConstraints)

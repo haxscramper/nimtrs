@@ -82,46 +82,47 @@ let arithmImpl* = TermImpl[Arithm, ArithmOp](
 )
 
 
+let rSystem* = makeReductionSystem(
+  # NOTE this madness is intended to be generated from some kind of
+  # DSL, not written by hand.
+  @[
+    # A + 0 -> A
+    makeRulePair(
+      nOp(aopAdd, @[nVar("A"), nConst(0)]).makeMatcher(),
+      nVar("A").makeGenerator()
+    ),
+
+    # A + S(B) -> S(A + B)
+    makeRulePair(
+      nOp(aopAdd, @[
+        nVar("A"), nOp(aopSucc, @[ nVar("B") ]) ]).makeMatcher(),
+      nOp(aopSucc, @[
+        nOp(aopAdd, @[ nVar("A"), nVar("B") ]) ]).makeGenerator()
+    ),
+
+    # A * 0 -> 0
+    makeRulePair(
+      nOp(aopMult, @[ nVar("A"), nConst(0) ]).makeMatcher(),
+      nConst(0).makeGenerator()
+    ),
+
+    # A * S(B) -> A + (A * B)
+    makeRulePair(
+      nOp(aopMult, @[
+        nVar("A"), nOp(aopSucc, @[ nVar("B") ])]).makeMatcher(),
+      nOp(aopAdd, @[
+        nVar("A"),
+        nOp(aopMult, @[ nVar("A"), nVar("B") ])]).makeGenerator()
+    )
+  ]
+)
+
 suite "Hterms callback/arithmetic":
   test "Arithmetic addition":
 
 
     # assertCorrect(cb)
 
-    let rSystem = makeReductionSystem(
-      # NOTE this madness is intended to be generated from some kind of
-      # DSL, not written by hand.
-      @[
-        # A + 0 -> A
-        makeRulePair(
-          nOp(aopAdd, @[nVar("A"), nConst(0)]).makeMatcher(),
-          nVar("A").makeGenerator()
-        ),
-
-        # A + S(B) -> S(A + B)
-        makeRulePair(
-          nOp(aopAdd, @[
-            nVar("A"), nOp(aopSucc, @[ nVar("B") ]) ]).makeMatcher(),
-          nOp(aopSucc, @[
-            nOp(aopAdd, @[ nVar("A"), nVar("B") ]) ]).makeGenerator()
-        ),
-
-        # A * 0 -> 0
-        makeRulePair(
-          nOp(aopMult, @[ nVar("A"), nConst(0) ]).makeMatcher(),
-          nConst(0).makeGenerator()
-        ),
-
-        # A * S(B) -> A + (A * B)
-        makeRulePair(
-          nOp(aopMult, @[
-            nVar("A"), nOp(aopSucc, @[ nVar("B") ])]).makeMatcher(),
-          nOp(aopAdd, @[
-            nVar("A"),
-            nOp(aopMult, @[ nVar("A"), nVar("B") ])]).makeGenerator()
-        )
-      ]
-    )
 
     let res = reduce(
       # S(0) + S(0)
