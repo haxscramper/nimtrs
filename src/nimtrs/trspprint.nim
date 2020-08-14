@@ -15,7 +15,7 @@ import trscore
 #   else:
 #     "_" & $vs.getVName()
 
-proc treeRepr*[V, F](term: Term[V, F],
+func treeRepr*[V, F](term: Term[V, F],
                      cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)
   case getKind(term):
@@ -37,7 +37,7 @@ proc treeRepr*[V, F](term: Term[V, F],
     of tkPattern:
       &"{ind} <<<PATTERN TREE REPR>>>"
 
-proc treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
+func treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
   let ind = "  ".repeat(depth)
   if cb.isFunctor(val):
     return (
@@ -48,11 +48,11 @@ proc treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
     return cb.valStrGen(val)
       .split("\n").mapIt(ind & "cst " & it).join("\n")
 
-proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
+func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
   case term.getKind():
     of tkPattern:
       term.getPatt().exprRepr(cb)
-# proc exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+# func exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
       # raiseAssert("#[ IMPLEMENT ]#")
     of tkList:
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
@@ -75,10 +75,10 @@ proc exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
     of tkPlaceholder:
       "_"
 
-proc exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf
-proc exprRepr*[V, F](matcher: TermMatcher[V, F], cb: TermImpl[V, F]): TermBuf =
+func exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf
+func exprRepr*[V, F](matcher: TermMatcher[V, F], cb: TermImpl[V, F]): TermBuf =
   let header = matcher.isPattern.tern(
-    exprRepr(matcher.patt, cb), "proc"
+    exprRepr(matcher.patt, cb), "func"
   ).toTermBufFast()
   # var tmp: Seq2D[TermBuf]
   # tmp.appendRow(@[
@@ -102,7 +102,7 @@ proc exprRepr*[V, F](matcher: TermMatcher[V, F], cb: TermImpl[V, F]): TermBuf =
     result = header
 
 
-proc exprRepr*[V, F](env: TermEnv[V, F], cb: TermImpl[V, F], forceOneLine: bool = false): string =
+func exprRepr*[V, F](env: TermEnv[V, F], cb: TermImpl[V, F], forceOneLine: bool = false): string =
   if env.len > 3 and not forceOneLine:
     "{\n" & env.mapPairs(&"  {lhs.exprRepr()} -> {rhs.exprRepr(cb)}").joinl() & "\n}"
   else:
@@ -110,7 +110,7 @@ proc exprRepr*[V, F](env: TermEnv[V, F], cb: TermImpl[V, F], forceOneLine: bool 
       &"({lhs.exprRepr()} -> {rhs.exprRepr(cb)})"
     ).join(" ") & "}"
 
-proc exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf =
+func exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf =
   var blocks: Seq2D[TermBuf]
   for idx, patt in matchers.patterns:
     let pref: string = if matchers.patterns.len == 1: "" else: $idx & ": "
@@ -119,27 +119,27 @@ proc exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf =
 
   return blocks.toTermBuf()
 
-proc exprReprImpl*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): seq[TermBuf] =
+func exprReprImpl*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): seq[TermBuf] =
   let rhs: TermBuf = rule.gen.isPattern.tern(
     exprRepr(rule.gen.patt),
-    "proc"
+    "func"
   ).toTermBufFast()
 
   return @[ rule.matchers.exprReprImpl(cb), (" ~~> ").toTermBufFast(), rhs ]
 
-proc exprRepr*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): string =
+func exprRepr*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): string =
   @[exprReprImpl(rule, cb)].toTermBuf().toString()
 
-proc exprReprImpl*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): TermBuf =
+func exprReprImpl*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): TermBuf =
   sys.mapPairs(
     @[ ($idx & ": ").toTermBufFast() ] & rhs.exprReprImpl(cb)
   ).toTermBuf()
 
-proc exprRepr*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): string =
+func exprRepr*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): string =
   exprReprImpl(sys, cb).toString().split("\n").mapIt(
     it.strip(leading = false)).join("\n")
 
-proc exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+func exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
   case expr.kind:
     of tpkTerm:
       expr.term.getIt().exprRepr(cb)

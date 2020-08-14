@@ -239,14 +239,14 @@ suite "Nim trs primitives":
     }).exprRepr()
 
     assertEq nOp(nConst(12), nConst(22)).exprRepr(), "tmkF('12', '22')"
-    assertEq mkEnv({"ii" : nConst(nT(10))}).exprRepr(), "{(_ii -> '10')}"
+    assertEq mkEnv({"ii" : nConst(nT(10))}).exprRepr(), "{($ii -> '10')}"
 
     assertEq makeRule(nOp(nVar("i1")), nVar("i1")).exprRepr(),
-           "tmkF(_i1) ~~> _i1"
+           "tmkF($i1) ~~> $i1"
 
     assertEq makeSystem({
       nOp(nVar("i1"), nConst(nT(90))) : nVar("i1")
-    }).exprRepr(), "0: tmkF(_i1, '90') ~~> _i1"
+    }).exprRepr(), "0: tmkF($i1, '90') ~~> $i1"
 
 suite "Pattern matching":
   proc unifTest(list: seq[int],

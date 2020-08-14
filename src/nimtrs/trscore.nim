@@ -131,12 +131,13 @@ type
     ##       valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
     ##     )
 
-    isFunctorSym*: proc(val: F): bool
-    getArguments*: proc(val: V): seq[V]
-    getSym*: proc(val: V): F
-    makeFunctor*: proc(sym: F, subt: seq[V]): V
-    makeList*: proc(subt: seq[V]): V
-    valStrGen*: proc(val: V): string ## Conver value to string.
+    isFunctorSym*: proc(val: F): bool {.noSideEffect.}
+    getArguments*: proc(val: V): seq[V] {.noSideEffect.}
+    getSym*: proc(val: V): F {.noSideEffect.}
+    makeFunctor*: proc(sym: F, subt: seq[V]): V {.noSideEffect.}
+    makeList*: proc(subt: seq[V]): V {.noSideEffect.}
+    valStrGen*: proc(val: V): string {.noSideEffect.}## Conver value
+    ## to string.
 
   TermEnv*[V, F] = object
     ## Mapping between variable symbols and values
@@ -144,7 +145,8 @@ type
 
   GenProc*[V, F] = proc(env: TermEnv[V, F]): Term[V, F] ## Proc for
   ## generaing Values during rewriting.
-  DefaultGenProc*[V, F] = proc(env: TermEnv[V, F]): TermEnv[V, F] ## Generate
+  DefaultGenProc*[V, F] = proc(
+    env: TermEnv[V, F]): TermEnv[V, F] {.noSideEffect.} ## Generate
   ## default values for variables
 
   MatchProc*[V, F] = proc(test: Term[V, F]): Option[TermEnv[V, F]]
@@ -319,14 +321,15 @@ func `==`*(l: VarSym, str: string): bool =
 func listvarp*(vs: VarSym): bool = vs.isList
 func getVName*(vs: VarSym): string = vs.name
 func varp*[V, F](t: Term[V, F]): bool = (t.tkind == tkVariable)
-func listvarp*[V, F](t: Term[V, F]): bool = t.name.listvarp()
+func listvarp*[V, F](t: Term[V, F]): bool =
+  t.tkind == tkVariable and t.name.listvarp()
 
 
-proc exprRepr*(vs: VarSym): string =
+func exprRepr*(vs: VarSym): string =
   if vs.listvarp:
     "@" & vs.name
   else:
-    "_" & vs.name
+    "$" & vs.name
 
 
 func getKind*[V, F](t: Term[V, F]): TermKind =
@@ -1050,9 +1053,9 @@ func unif*[V, F](
     echoi level, t1.exprRepr(), t2.exprRepr()
 
 
-  if ((t1.varp() and t1.listvarp()) or (t2.varp() and t2.listvarp())):
+  if t1.listvarp() or t2.listvarp():
     var env = env
-    if t1.varp():
+    if t1.listvarp():
       if env.appendOrUnif(t1.getVName(), t2):
         result = some(env)
       else:
