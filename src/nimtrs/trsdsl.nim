@@ -1,4 +1,4 @@
-import macros, strformat, sets, sugar
+import macros, strformat, sets, sugar, strutils, sequtils
 import trscore
 import hmisc/[hexceptions, helpers]
 import hmisc/types/[colorstring, initcalls]
@@ -115,6 +115,21 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
         node.getTypeInst().toStrLit().strVal().toYellow()
     ))
 
+proc pprintCalls*(node: NimNode, level: int): void =
+  let pref = "  ".repeat(level)
+  case node.kind:
+    of nnkCall:
+      echo pref, $node[0].toStrLit()
+      if node[1..^1].noneOfIt(it.kind == nnkCall):
+        echo pref, node[1..^1].mapIt($it.toStrLit()).join(", ")
+      else:
+        for arg in node[1..^1]:
+          pprintCalls(arg, level + 1)
+    of nnkIdent:
+      echo pref, ($node).toGreen()
+    else:
+      echo ($node.toStrLit()).indent(level * 2)
+
 macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
   # TODO infer `fPrefix` from functor symbol
   impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
@@ -131,4 +146,5 @@ macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
     implId: impl.strVal()
   ), body)
 
-  colorPrint(result)
+  pprintCalls(result, 0)
+  # colorPrint(result)
