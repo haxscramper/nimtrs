@@ -14,7 +14,7 @@ suite "DSL":
     ]).toTerm(arithmImpl)
 
 
-    initTRS("aop", term, arithmImpl):
+    let trs = initTRS("aop", arithmImpl):
       Plus($a, 0) => $a
       Plus($a, Succ($b)) => Succ($a, $b)
       Mult($a, 0) => 0

@@ -57,8 +57,9 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
             "makeVariable", [vType, fType], newLit(vsym))
           result[1].incl vsym
         else:
-          raiseAssert("#[ IMPLEMENT ]#")
-    # of nnkIntLit:
+          raiseAssert(&"#[ IMPLEMENT {body[0].strVal()} ]#")
+    of nnkIntLit:
+      result[0] = mkCallNode("toTerm", @[body, newLit(conf.implId)])
     else:
       raiseAssert(&"#[ IMPLEMENT for kind {body.kind} ]#")
 
@@ -80,8 +81,7 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
       line,
       (line.kind == nnkInfix and line[0].strVal == "=>"),
       msgjoin("Expected match arm in form of",
-              "`<pattern> => <result>`".toYellow())
-    )
+              "`<pattern> => <result>`".toYellow()))
 
     if line[1] == ident("_"):
       var novars: HashSet[VarSym]
@@ -95,45 +95,30 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
         parseTermExpr(line[2], conf, vars)
       )
 
+func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
+  assertNodeIt(
+      node,
+      (node.kind == nnkSym and
+       node.getTypeInst().kind == nnkBracketExpr and
+       node.getTypeInst()[0].strVal() == stype.head),
+      msgjoin(
+        "Expected variable of type `", stype, "` but found '",
+        node.toStrLit().strVal().toYellow(), "' of type",
+        node.getTypeInst().toStrLit().strVal().toYellow()
+    ))
 
-
-macro initTRS*(fPrefix: string, term, impl: typed, body: untyped): untyped =
+macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
   # TODO infer `fPrefix` from functor symbol
-  assertNodeIt(
-    term,
-    (term.kind == nnkSym and
-     term.getTypeInst().kind == nnkBracketExpr and
-     $term.getTypeInst()[0] == "Term"),
-    msgjoin(
-      "Expected variable of type `Term[V, F]` but found '",
-      term.toStrLit().strVal().toYellow(), "' of type",
-      term.getTypeInst().toStrLit().strVal().toYellow()
-  ))
-
-
-  assertNodeIt(
-    impl,
-    (impl.kind == nnkSym and
-     impl.getTypeInst().kind == nnkBracketExpr and
-     $impl.getTypeInst()[0] == "TermImpl"),
-    msgjoin(
-      "Expected variable of type `TermImpl[V, F]` but found '",
-      term.toStrLit().strVal().toYellow(), "' of type",
-      term.getTypeInst().toStrLit().strVal().toYellow()
-  ))
-
+  impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
   assertNodeIt(
     fPrefix,
     fPrefix.kind in {nnkStrLit, nnkIdent},
     "Expected string literal or ident for functor prefix")
 
-  let termType = term.getTypeInst()
+  let implType = impl.getTypeInst()
   result = initTRSImpl(GenParams(
-    vName: termType[1].strVal(),
-    fName: termType[2].strVal(),
+    vName: implType[1].strVal(),
+    fName: implType[2].strVal(),
     fPrefix: fPrefix.strVal(),
-    termId: term.strVal(),
     implId: impl.strVal()
   ), body)
-
-  # echo result.toStrLit()
