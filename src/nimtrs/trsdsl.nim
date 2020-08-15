@@ -3,9 +3,13 @@ import trscore
 import hmisc/[hexceptions, helpers]
 import hmisc/types/[colorstring, initcalls]
 
+# TODO validate functor conststruction by checking number of arguments
+# (and possibly their types (it is possible /technically/))
+
 type
   GenParams = object
     vName, fName, fPrefix, termId, implId: string
+    nodecl: bool
 
   VarSpec = object
     isNullable: bool
@@ -22,24 +26,44 @@ func mergeTable*(lhs: var VarTable, rhs: VarTable): void =
       if lhs[vsym].isNullable and (not spec.isNullable):
         lhs[vsym].isNullable = false
 
+func exceptionWrongListp(
+  tbl: var VarTable, vsym, revert: VarSym, spec: VarSpec): CodeError =
+    toCodeError(
+      {
+        spec.decl : ("Has " &
+          vsym.listvarp().tern("list (@)", "scalar ($)").toGreen() &
+          " prefix"),
+        tbl[revert].decl : "First declared here as " &
+          (not vsym.listvarp()).tern("list (@)", "scalar ($)"
+          ).toGreen(),
+      },
+      msgjoin(
+        "Variable", ($vsym).toYellow(),
+        "is already declared as", ($revert).toYellow(), ".",
+      )
+    )
+
+
+func exceptionUndefinedVar(
+  tbl: VarTable, vsym: VarSym, spec: VarSpec): CodeError =
+    toCodeError(
+      { spec.decl : "Not declared in LHS" },
+      msgjoin("Undeclared variable", ($vsym).toYellow())
+    )
+
+func usevar*(tbl: var VarTable, vsym: VarSym, spec: VarSpec): void =
+  if vsym notin tbl:
+    let revert = makeVarSym(vsym.getVName(), not vsym.listvarp())
+    if revert in tbl:
+      raise exceptionWrongListp(tbl, vsym, revert, spec)
+    else:
+      raise exceptionUndefinedVar(tbl, vsym, spec)
+
 func addvar*(tbl: var VarTable, vsym: VarSym, spec: VarSpec): void =
   if vsym notin tbl:
     let revert = makeVarSym(vsym.getVName(), not vsym.listvarp())
     if revert in tbl:
-      raise toCodeError(
-        {
-          spec.decl : ("Has " &
-            vsym.listvarp().tern("list (@)", "scalar ($)").toGreen() &
-            " prefix"),
-          tbl[revert].decl : "First declared here as " &
-            (not vsym.listvarp()).tern("list (@)", "scalar ($)"
-            ).toGreen(),
-        },
-        msgjoin(
-          "Variable", ($vsym).toYellow(),
-          "is already declared as", ($revert).toYellow(), ".",
-        )
-      )
+      raise exceptionWrongListp(tbl, vsym, revert, spec)
     else:
       tbl[vsym] = spec
   else:
@@ -99,7 +123,10 @@ func parseTermPattern(
         result = mkCallNode("makeVariable", [vType, fType],
                                makeInitAllFields(vsym))
 
-        vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
+        if conf.nodecl:
+          vtable.usevar(vsym, VarSpec(decl: body, isNullable: nullable))
+        else:
+          vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
     of nnkPrefix:
       let prefstr = body[0].strval()
       case prefstr:
@@ -109,7 +136,10 @@ func parseTermPattern(
           result = mkCallNode(
             "makeVariable", [vType, fType], makeInitAllFields(vsym))
 
-          vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
+          if conf.nodecl:
+            vtable.usevar(vsym, VarSpec(decl: body, isNullable: nullable))
+          else:
+            vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
 
         of "*", "?", "+", "!":
           let nullable = if prefstr in ["*", "?"]: true else: nullable
@@ -155,6 +185,9 @@ func parseTermPattern(
 func parseTermExpr(
   body: NimNode, conf: GenParams, vtable: VarTable): NimNode =
   var vtable = vtable
+  let conf = conf.withIt:
+    it.nodecl = true
+
   let impl = parseTermPattern(body, conf, false, vtable)
   return impl
 

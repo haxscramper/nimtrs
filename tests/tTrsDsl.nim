@@ -19,7 +19,15 @@ suite "DSL":
       mkOp(aopSucc, @[ mkOp(aopSucc, @[ mkVal(0) ]) ])
     ]).toTerm(arithmImpl)
 
-    when false:
+    when false: # NOTE compilation ERROR test
+      discard initTRS("aop", arithmImpl):
+        Add($a, 0) => Succ(@a)
+
+    when false: # NOTE compilation ERROR test
+      discard initTRS("aop", arithmImpl):
+        Add($a, 0) => Succ($a, $b)
+
+    when true:
       let trs = initTRS("aop", arithmImpl):
         Add($a, 0) => $a
         Add($a, Succ($b)) => Succ(Add($a, $b))
@@ -51,9 +59,9 @@ suite "DSL":
           else:
             assert conds.len == 1
 
-      # this is a TEST for compilation error
-      # if term.matchPatternNim(IfStmt($hello, @hello)):
-      #   discard
+      when false: # this is a TEST for compilation error
+        if term.matchPatternNim(IfStmt($hello, @hello)):
+          discard
 
     ifTest:
       if 12 == 22:
