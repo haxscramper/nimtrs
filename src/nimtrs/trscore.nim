@@ -243,6 +243,15 @@ proc cannotUse(rs: ReductionState, path: TreePath, rule: RuleId): bool =
 
 #==========================  making new terms  ===========================#
 
+func makePattern*[V, F](patt: TermPattern[V, F],
+                        fullMatch: bool = false): Term[V, F] =
+  Term[V, F](pattern: patt,
+             tkind: tkPattern,
+             fullmatch: fullmatch)
+
+func makePattern*[V, F](patt: Term[V, F]): Term[V, F] =
+  patt
+
 func makeVarSym*(name: string, islist: bool): VarSym =
   VarSym(name: name, islist: islist)
 
@@ -281,17 +290,24 @@ func makeFunctor*[V, F](
 func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
   makeFunctor(sym, toSeq(subt))
 
-func makePattern*[V, F](patt: TermPattern[V, F],
-                        fullMatch: bool): Term[V, F] =
-  Term[V, F](pattern: patt,
-             tkind: tkPattern,
-             fullmatch: fullmatch)
+# func makeFunctor*[V, F](sym: F, subt: varargs[TermPattern[V, F]]): Term[V, F]
+
 
 #===========================  Making patterns  ===========================#
 
+func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
 
 func makeAndP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkConcat, patterns: patts)
+
+# func makeAndP*[V, F](
+#   patts: varargs[TermPattern[V, F]]): TermPattern[V, F] =
+#   TermPattern[V, F](kind: tpkConcat, patterns: toSeq(patts))
+
+func makeAndP*[V, F](
+  patts: varargs[TermPattern[V, F], makeTermP]): TermPattern[V, F] =
+  TermPattern[V, F](kind: tpkConcat, patterns: toSeq(patts))
 
 func makeOrP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkAlternative, patterns: patts)
@@ -299,14 +315,18 @@ func makeOrP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
 func makeOptP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt))
 
+func makeOptP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  patt.makeTermP()
+
 func makeZeroOrMoreP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt))
+
+func makeZeroOrMoreP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  patt.makeTermP()
 
 func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkNegation, patt: mkIt(patt))
 
-func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
 
 #============================  Aux functions  ============================#
 
@@ -716,6 +736,11 @@ iterator pairs*[V, F](env: TermEnv[V, F]): (VarSym, Term[V, F]) =
   ## Iterate over all variables and values in evnironment
   for lhs, rhs in pairs(env.values):
     yield (lhs, rhs)
+
+func getValues*[V, F](
+  env: TermEnv[V, F], vsym: VarSym,
+  impl: TermImpl[V, F]): seq[V] =
+  env[vsym].getElements().mapIt(fromTerm(it, impl))
 
 func contains*(vset: VarSet, vname: string): bool =
   vname.parseVarSym() in vset

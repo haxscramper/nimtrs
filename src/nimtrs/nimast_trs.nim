@@ -5,7 +5,7 @@ import hmisc/algo/[halgorithm, htree_mapping]
 export macros, halgorithm
 
 type
-  NodeTerm = Term[NimNode, NimNodeKind]
+  NodeTerm* = Term[NimNode, NimNodeKind]
   NodeReduction* = RedSystem[NimNode, NimNodeKind]
   NodeMatcher* = TermMatcher[NimNode, NimNodeKind]
   NodeEnv* = TermEnv[NimNode, NimNodeKind]
@@ -27,7 +27,7 @@ const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
       else: newTree(op, sub)
   ),
   getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
-  valStrGen: (proc(n: NimNode): string = $n.toStrLit()),
+  valStrGen: (proc(n: NimNode): string = n.toStrLit().strVal()),
 )
 
 func makeNimNodeVariable*(name: VarSym): NodeTerm =

@@ -3,15 +3,37 @@ import trscore
 import hmisc/[hexceptions, helpers]
 import hmisc/types/[colorstring, initcalls]
 
-
 type
   GenParams = object
     vName, fName, fPrefix, termId, implId: string
-    # vName: string
-    # fName: string
-    # fPrefix: string
-    # termId: string
-    # implId: string
+
+template mapItInfix*(topInfix: NimNode, op: untyped): untyped =
+  type ResT = typeof((var it {.inject.}: NimNode; op))
+  var curr = topInfix
+  # let it {.inject.} = topInfix
+  var res: seq[ResT]
+
+  if curr.kind == nnkInfix:
+    block:
+      let it {.inject.} = curr[1]
+      res.add op
+
+    let infix = topInfix[0].strVal()
+    # var cnt = 0
+    while curr.kind == nnkInfix and curr[0] == ident(infix):
+      let it {.inject.} = curr[2]
+      res.add op
+      curr = curr[1]
+
+      # inc cnt
+      # if cnt > 3:
+      #   quit 0
+
+    # let it {.inject.} = curr
+    # res.add op
+    # res.reverse
+
+  res
 
 func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
   let
@@ -25,17 +47,16 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
           raiseAssert("#[ IMPLEMENT ]#")
         of nnkIdent:
           let id = body[0].strVal()
-          var varset: VarSet
           let args = collect(newSeq):
             for arg in body[1..^1]:
               let (body, vars) = parseTermPattern(arg, conf)
-              varset.incl vars # TODO check if variables don't
-                               # override each other
+              result[1].incl vars # TODO check if variables don't
+                                  # override each other
               body
 
           result[0] = mkCallNode("makeFunctor", @[
-            ident(conf.fPrefix & id)] & args, @[vType, fType])
-          result[1] = varset
+            ident(conf.fPrefix & id)] &
+              args.mapIt(newCall("makePattern", it)), @[vType, fType])
 
 
         else:
@@ -52,17 +73,53 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
 
         result[1].incl vsym
     of nnkPrefix:
+      # echov body.treeRepr()
       case body[0].strVal():
         of "$", "@":
           let vsym = makeVarSym(
             body[1].strVal(), islist = (body[0].strval() == "@"))
+          # echov vsym
           result[0] = mkCallNode(
             "makeVariable", [vType, fType], makeInitAllFields(vsym))
           result[1].incl vsym
+        of "*", "?", "+", "!":
+          case body[0].kind:
+            of nnkPar:
+              assertNodeIt(body[0], body[0].len == 1,
+                           "Use `&` for concatenation, not commas")
+
+              result = body[0][0].parseTermPattern(conf)
+            else:
+              result = body[1].parseTermPattern(conf)
+
+          let callname =
+            case body[0].strVal():
+              of "*": "makeZeroOrMoreP"
+              of "+": "makeOneOrMoreP"
+              of "?": "makeOptP"
+              of "!": "makeNegationP"
+              else: "<<<INVALID_PREFIX>>>"
+
+          result[0] = mkCallNode(callname, @[result[0]])
         else:
           raiseAssert(&"#[ IMPLEMENT {body[0].strVal()} ]#")
     of nnkIntLit:
       result[0] = mkCallNode("toTerm", @[ident(conf.implId), body])
+    of nnkInfix:
+      case body[0].strVal():
+        of "&", "|":
+          let elems: seq[NimNode] = body.mapItInfix:
+            let (body, newvars) = it.parseTermPattern(conf)
+            result[1].incl newvars
+            body
+
+          let callname =
+            case body[0].strVal():
+              of "&": "makeAndP"
+              of "|": "makeOrP"
+              else: "<<<INVALID_PREFIX>>>"
+
+          result[0] = mkCallNode(callname, @[ elems.toBracketSeq() ])
     else:
       raiseAssert(&"#[ IMPLEMENT for kind {body.kind} ]#")
 
@@ -117,21 +174,27 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
 
 proc pprintCalls*(node: NimNode, level: int): void =
   let pref = "  ".repeat(level)
+  let pprintKinds = {nnkCall, nnkPrefix, nnkBracket}
   case node.kind:
     of nnkCall:
       echo pref, $node[0].toStrLit()
-      if node[1..^1].noneOfIt(it.kind == nnkCall):
-        echo pref, node[1..^1].mapIt($it.toStrLit()).join(", ")
+      if node[1..^1].noneOfIt(it.kind in pprintKinds):
+        echo pref, node[1..^1].mapIt($it.toStrLit()).join(", ").toYellow()
       else:
         for arg in node[1..^1]:
           pprintCalls(arg, level + 1)
+    of nnkPrefix:
+      echo pref, node[0]
+      pprintCalls(node[1], level)
+    of nnkBracket:
+      for subn in node:
+        pprintCalls(subn, level + 1)
     of nnkIdent:
       echo pref, ($node).toGreen()
     else:
       echo ($node.toStrLit()).indent(level * 2)
 
-macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
-  # TODO infer `fPrefix` from functor symbol
+func makeGenParams*(fPrefix, impl: NimNode): GenParams =
   impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
   assertNodeIt(
     fPrefix,
@@ -139,12 +202,63 @@ macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
     "Expected string literal or ident for functor prefix")
 
   let implType = impl.getTypeInst()
-  result = initTRSImpl(GenParams(
-    vName: implType[1].strVal(),
-    fName: implType[2].strVal(),
-    fPrefix: fPrefix.strVal(),
-    implId: impl.strVal()
-  ), body)
+  result = GenParams(
+     vName: implType[1].strVal(),
+     fName: implType[2].strVal(),
+     fPrefix: fPrefix.strVal(),
+     implId: impl.strVal()
+   )
 
-  # pprintCalls(result, 0)
-  # colorPrint(result)
+macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
+  result = initTRSImpl(makeGenParams(fPrefix, impl) , body)
+
+
+macro matchPattern*[V, F](
+  term: Term[V, F], fPrefix: string, impl: TermImpl[V, F],
+  patt: untyped): untyped =
+  let conf = makeGenParams(fPrefix, impl)
+  let (patt, vars) = patt.parseTermPattern(conf)
+  patt.pprintCalls(0)
+  # echo patt.toStrLit()
+  # echo vars
+  let unifcall = newCall("unifp", term, patt)
+  var
+    vardecls: seq[NimNode]
+    varassign: seq[NimNode]
+
+  let
+    vtype = ident(conf.vName)
+
+  for varsym in vars:
+    let
+      varid = ident(varsym.getvname)
+      varn = newLit(varsym.getvname)
+
+    vardecls.add:
+      if varsym.listvarp:
+        quote do:
+           var `varid` {.inject.}: seq[`vtype`]
+      else:
+        quote do:
+          var `varid` {.inject.}: `vtype`
+
+    varassign.add:
+      if varsym.listvarp:
+        quote do:
+          `varid` = env.getValues(makeVarSym(`varn`, true), `impl`)
+      else:
+        quote do:
+          `varid` = env[makeVarSym(`varn`, true)].fromTerm(`impl`)
+
+  block:
+    let vardecls = newStmtList(vardecls)
+    let varassign = newStmtList(varassign)
+    result = quote do:
+      `vardecls`
+      if `unifcall`:
+        `varassign`
+        true
+      else:
+        false
+
+  echo result.toStrLit()
