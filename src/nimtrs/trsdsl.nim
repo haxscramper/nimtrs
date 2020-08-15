@@ -218,7 +218,7 @@ macro matchPattern*[V, F](
   patt: untyped): untyped =
   let conf = makeGenParams(fPrefix, impl)
   let (patt, vars) = patt.parseTermPattern(conf)
-  patt.pprintCalls(0)
+  # patt.pprintCalls(0)
   # echo patt.toStrLit()
   # echo vars
   let unifcall = newCall("unifp", term, patt)
@@ -248,7 +248,7 @@ macro matchPattern*[V, F](
           `varid` = env.getValues(makeVarSym(`varn`, true), `impl`)
       else:
         quote do:
-          `varid` = env[makeVarSym(`varn`, true)].fromTerm(`impl`)
+          `varid` = env[makeVarSym(`varn`, false)].fromTerm(`impl`)
 
   block:
     let vardecls = newStmtList(vardecls)
@@ -261,4 +261,4 @@ macro matchPattern*[V, F](
       else:
         false
 
-  echo result.toStrLit()
+  # echo result.toStrLit()
