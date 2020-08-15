@@ -26,7 +26,20 @@ func addvar*(tbl: var VarTable, vsym: VarSym, spec: VarSpec): void =
   if vsym notin tbl:
     let revert = makeVarSym(vsym.getVName(), not vsym.listvarp())
     if revert in tbl:
-      raiseAssert("#[ IMPLEMENT ]#")
+      raise toCodeError(
+        {
+          spec.decl : ("Has " &
+            vsym.listvarp().tern("list (@)", "scalar ($)").toGreen() &
+            " prefix"),
+          tbl[revert].decl : "First declared here as " &
+            (not vsym.listvarp()).tern("list (@)", "scalar ($)"
+            ).toGreen(),
+        },
+        msgjoin(
+          "Variable", ($vsym).toYellow(),
+          "is already declared as", ($revert).toYellow(), ".",
+        )
+      )
     else:
       tbl[vsym] = spec
   else:
@@ -297,4 +310,4 @@ macro matchPattern*[V, F](
       else:
         false
 
-  echo result.toStrLit()
+  # echo result.toStrLit()

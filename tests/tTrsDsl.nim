@@ -36,7 +36,6 @@ suite "DSL":
       matchPattern(term, "nnk", nimAstImpl, patt)
 
     macro ifTest(body: untyped): untyped =
-      static: echo "iftest macro"
       for stmt in body:
         let term = stmt.toTerm(nimAstImpl)
         if term.matchPatternNim(
@@ -46,8 +45,20 @@ suite "DSL":
           assert bodies is seq[NimNode]
           assert elsebody is Option[NimNode]
 
+          if elsebody.isSome():
+            assert conds.len == 2
+            assert bodies.len == 2
+          else:
+            assert conds.len == 1
+
+      # this is a TEST for compilation error
+      # if term.matchPatternNim(IfStmt($hello, @hello)):
+      #   discard
+
     ifTest:
       if 12 == 22:
+        echo "123"
+      elif false:
         echo "123"
       else:
         echo "123123"

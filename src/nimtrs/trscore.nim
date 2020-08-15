@@ -358,6 +358,7 @@ func exprRepr*(vs: VarSym): string =
   else:
     "$" & vs.name
 
+func `$`*(vs: VarSym): string = vs.exprRepr()
 
 func getKind*[V, F](t: Term[V, F]): TermKind =
   t.tkind
