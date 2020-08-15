@@ -44,10 +44,13 @@ suite "DSL":
 
           assert conds is seq[NimNode]
           assert bodies is seq[NimNode]
-          assert elsebody is NimNode
+          assert elsebody is Option[NimNode]
 
     ifTest:
       if 12 == 22:
         echo "123"
       else:
         echo "123123"
+
+      if 20 == 29:
+        echo "123"

@@ -7,10 +7,35 @@ type
   GenParams = object
     vName, fName, fPrefix, termId, implId: string
 
+  VarSpec = object
+    isNullable: bool
+    decl: NimNode
+
+  VarTable = Table[VarSym, VarSpec]
+
+
+func mergeTable*(lhs: var VarTable, rhs: VarTable): void =
+  for vsym, spec in rhs:
+    if vsym notin lhs:
+      lhs[vsym] = spec
+    else:
+      if lhs[vsym].isNullable and (not spec.isNullable):
+        lhs[vsym].isNullable = false
+
+func addvar*(tbl: var VarTable, vsym: VarSym, spec: VarSpec): void =
+  if vsym notin tbl:
+    let revert = makeVarSym(vsym.getVName(), not vsym.listvarp())
+    if revert in tbl:
+      raiseAssert("#[ IMPLEMENT ]#")
+    else:
+      tbl[vsym] = spec
+  else:
+    if tbl[vsym].isNullable and (not spec.isNullable):
+      tbl[vsym].isNullable = false
+
 template mapItInfix*(topInfix: NimNode, op: untyped): untyped =
   type ResT = typeof((var it {.inject.}: NimNode; op))
   var curr = topInfix
-  # let it {.inject.} = topInfix
   var res: seq[ResT]
 
   if curr.kind == nnkInfix:
@@ -25,17 +50,10 @@ template mapItInfix*(topInfix: NimNode, op: untyped): untyped =
       res.add op
       curr = curr[1]
 
-      # inc cnt
-      # if cnt > 3:
-      #   quit 0
-
-    # let it {.inject.} = curr
-    # res.add op
-    # res.reverse
-
   res
 
-func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
+func parseTermPattern(
+  body: NimNode, conf: GenParams, nullable: bool, vtable: var VarTable): NimNode =
   let
     fType = mkNType(conf.fName)
     vType = mkNType(conf.vName)
@@ -49,12 +67,9 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
           let id = body[0].strVal()
           let args = collect(newSeq):
             for arg in body[1..^1]:
-              let (body, vars) = parseTermPattern(arg, conf)
-              result[1].incl vars # TODO check if variables don't
-                                  # override each other
-              body
+              parseTermPattern(arg, conf, nullable, vtable)
 
-          result[0] = mkCallNode("makeFunctor", @[
+          result = mkCallNode("makeFunctor", @[
             ident(conf.fPrefix & id)] &
               args.mapIt(newCall("makePattern", it)), @[vType, fType])
 
@@ -65,53 +80,53 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
     of nnkIdent:
       let str = body.strVal()
       if str == "_":
-        result[0] = mkCallNode("makePlaceholder", [vType, fType])
+        result = mkCallNode("makePlaceholder", [vType, fType])
       else:
         let vsym = parseVarSym(str)
-        result[0] = mkCallNode("makeVariable", [vType, fType],
+        result = mkCallNode("makeVariable", [vType, fType],
                                makeInitAllFields(vsym))
 
-        result[1].incl vsym
+        vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
     of nnkPrefix:
-      # echov body.treeRepr()
-      case body[0].strVal():
+      let prefstr = body[0].strval()
+      case prefstr:
         of "$", "@":
           let vsym = makeVarSym(
             body[1].strVal(), islist = (body[0].strval() == "@"))
-          # echov vsym
-          result[0] = mkCallNode(
+          result = mkCallNode(
             "makeVariable", [vType, fType], makeInitAllFields(vsym))
-          result[1].incl vsym
+
+          vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
+
         of "*", "?", "+", "!":
+          let nullable = if prefstr in ["*", "?"]: true else: nullable
           case body[0].kind:
             of nnkPar:
               assertNodeIt(body[0], body[0].len == 1,
                            "Use `&` for concatenation, not commas")
 
-              result = body[0][0].parseTermPattern(conf)
+              result = body[0][0].parseTermPattern(conf, nullable, vtable)
             else:
-              result = body[1].parseTermPattern(conf)
+              result = body[1].parseTermPattern(conf, nullable, vtable)
 
           let callname =
-            case body[0].strVal():
+            case prefstr:
               of "*": "makeZeroOrMoreP"
               of "+": "makeOneOrMoreP"
               of "?": "makeOptP"
               of "!": "makeNegationP"
               else: "<<<INVALID_PREFIX>>>"
 
-          result[0] = mkCallNode(callname, @[result[0]])
+          result = mkCallNode(callname, @[result])
         else:
           raiseAssert(&"#[ IMPLEMENT {body[0].strVal()} ]#")
     of nnkIntLit:
-      result[0] = mkCallNode("toTerm", @[ident(conf.implId), body])
+      result = mkCallNode("toTerm", @[ident(conf.implId), body])
     of nnkInfix:
       case body[0].strVal():
         of "&", "|":
           let elems: seq[NimNode] = body.mapItInfix:
-            let (body, newvars) = it.parseTermPattern(conf)
-            result[1].incl newvars
-            body
+            it.parseTermPattern(conf, nullable, vtable)
 
           let callname =
             case body[0].strVal():
@@ -119,14 +134,26 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarSet) =
               of "|": "makeOrP"
               else: "<<<INVALID_PREFIX>>>"
 
-          result[0] = mkCallNode(callname, @[ elems.toBracketSeq() ])
+          result = mkCallNode(callname, @[ elems.toBracketSeq() ])
     else:
       raiseAssert(&"#[ IMPLEMENT for kind {body.kind} ]#")
 
 
-func parseTermExpr(body: NimNode, conf: GenParams, vars: VarSet): NimNode =
-  let (impl, vars) = parseTermPattern(body, conf)
+func parseTermExpr(
+  body: NimNode, conf: GenParams, vtable: VarTable): NimNode =
+  var vtable = vtable
+  let impl = parseTermPattern(body, conf, false, vtable)
   return impl
+
+func parseTermExpr(body: NimNode, conf: GenParams): (NimNode, VarTable) =
+  var vtable: VarTable
+  let impl = parseTermPattern(body, conf, false, vtable)
+  return (impl, vtable)
+
+func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarTable) =
+  var vtable: VarTable
+  let impl = parseTermPattern(body, conf, false, vtable)
+  return (impl, vtable)
 
 func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
   # TODO: generate static assertion for match arms to have the same
@@ -218,9 +245,6 @@ macro matchPattern*[V, F](
   patt: untyped): untyped =
   let conf = makeGenParams(fPrefix, impl)
   let (patt, vars) = patt.parseTermPattern(conf)
-  # patt.pprintCalls(0)
-  # echo patt.toStrLit()
-  # echo vars
   let unifcall = newCall("unifp", term, patt)
   var
     vardecls: seq[NimNode]
@@ -229,7 +253,7 @@ macro matchPattern*[V, F](
   let
     vtype = ident(conf.vName)
 
-  for varsym in vars:
+  for varsym, spec in vars:
     let
       varid = ident(varsym.getvname)
       varn = newLit(varsym.getvname)
@@ -239,16 +263,28 @@ macro matchPattern*[V, F](
         quote do:
            var `varid` {.inject.}: seq[`vtype`]
       else:
-        quote do:
-          var `varid` {.inject.}: `vtype`
+        if spec.isNullable:
+          quote do:
+            var `varid` {.inject.}: Option[`vtype`]
+        else:
+          quote do:
+            var `varid` {.inject.}: `vtype`
 
     varassign.add:
       if varsym.listvarp:
         quote do:
           `varid` = env.getValues(makeVarSym(`varn`, true), `impl`)
       else:
-        quote do:
-          `varid` = env[makeVarSym(`varn`, false)].fromTerm(`impl`)
+        if spec.isNullable:
+          quote do:
+            let vars = makeVarSym(`varn`, false)
+            if vars in env:
+              `varid` = some(env[vars].fromTerm(`impl`))
+            else:
+              `varid` = none(`vtype`)
+        else:
+          quote do:
+            `varid` = env[makeVarSym(`varn`, false)].fromTerm(`impl`)
 
   block:
     let vardecls = newStmtList(vardecls)
@@ -261,4 +297,4 @@ macro matchPattern*[V, F](
       else:
         false
 
-  # echo result.toStrLit()
+  echo result.toStrLit()
