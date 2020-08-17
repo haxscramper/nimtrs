@@ -58,7 +58,7 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
     of tkConstant:
       if term.predp():
-        raiseAssert("#[ IMPLEMENT ]#")
+        "%?".toMagenta() & term.constPredRepr
       else:
         if term.functorvalp():
           $term.getFSym()
@@ -69,15 +69,26 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
       # tern(term.listvarp, "@", "_") &
         term.getVName().exprRepr()
     of tkFunctor:
-      if ($getSym(term)).validIdentifier():
-        $getSym(term) & "(" & term.getArguments().mapIt(it.exprRepr(cb)).join(", ") & ")"
-      else:
-        let subt = term.getArguments()
-        case subt.len():
-          of 1: &"{term.getSym()}({subt[0]})"
-          of 2: &"{subt[0]} {term.getSym()} {subt[1]}"
+      case term.headKind:
+        of fhkValue:
+          if ($getSym(term)).validIdentifier():
+            $getSym(term) & "(" & term.getArguments().mapIt(
+              it.exprRepr(cb)).join(", ") & ")"
           else:
-            $term.getSym() & "(" & subt.mapIt(it.exprRepr(cb)).join(", ") & ")"
+            let subt = term.getArguments()
+            case subt.len():
+              of 1: &"{term.getSym()}({subt[0]})"
+              of 2: &"{subt[0]} {term.getSym()} {subt[1]}"
+              else:
+                $term.getSym() & "(" & subt.mapIt(it.exprRepr(cb)).join(", ") & ")"
+
+        of fhkPredicate:
+          "%?".toMagenta() & term.funcPredRepr &
+            term.bindvarp().tern(&"[{term.getVname().exprRepr()}]", "") &
+            term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
+        else:
+          raiseAssert("#[ IMPLEMENT ]#")
+
     of tkPlaceholder:
       "_"
 

@@ -87,12 +87,12 @@ type
   Term*[V, F] = object
     case tkind*: TermKind
       of tkFunctor:
-        case headKind: FuncHeadKind:
+        case headKind*: FuncHeadKind:
           of fhkValue:
             functor: F
           of fhkPredicate:
             funcPred: proc(fhead: F): bool {.noSideEffect.}
-            funcPredRepr: string
+            funcPredRepr*: string
             case bindHead: bool
               of true:
                 headVar: VarSym
@@ -106,7 +106,7 @@ type
         case isPredicate: bool
           of true:
             constPred: proc(val: V): bool {.noSideEffect.}
-            constPredRepr: string
+            constPredRepr*: string
             case bindConst: bool
               of true:
                 constVar: VarSym
@@ -306,6 +306,15 @@ func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
     csym: csym
   )
 
+func makeConstant*[V, F](
+  constPred: proc(val: V): bool {.noSideEffect.},
+  constPredRepr: string): Term[V, F] =
+  Term[V, F](
+    isPredicate: true,
+    tkind: tkConstant,
+    constPred: constPred,
+    constPredRepr: constPredRepr,
+    bindConst: false)
 
 func makeConstant*[V, F](fsym: F): Term[V, F] =
   Term[V, F](
@@ -438,6 +447,10 @@ func functorvalp*[V, F](t: Term[V, F]): bool =
 
 func listvarp*[V, F](t: Term[V, F]): bool =
   t.tkind == tkVariable and t.name.listvarp()
+
+func bindvarp*[V, F](t: Term[V, F]): bool =
+  (t.tkind == tkFunctor and t.headKind == fhkPredicate and t.bindHead) or
+  (t.tkind == tkConstant and t.isPredicate and t.bindConst)
 
 
 func exprRepr*(vs: VarSym): string =

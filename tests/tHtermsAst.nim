@@ -132,10 +132,6 @@ func toTerm(val: int, impl: TermImpl[Ast, AstKind]): AstTerm =
 
 
 template transformTest*(body: untyped, termIn, termOut: typed): untyped =
-  static:
-    echo astToStr(body)
-    echo astToStr(termIn)
-
   let termIn1 = termIn.toTerm(cb)
   let termRes = matchWith(termIn1, cb):
     body
@@ -144,6 +140,8 @@ template transformTest*(body: untyped, termIn, termOut: typed): untyped =
     let res = termRes.get().fromTerm(cb)
     cmpTerm res, termOut
   else:
+    echo "input:\n", termIn1.exprRepr(cb)
+    echo "expected:\n", termOut.toTerm(cb).exprRepr(cb)
     fail("Rewrite is none")
 
 
@@ -197,7 +195,7 @@ suite "Hterms ast rewriting":
       (v.kind == akIdent) and (v.strVal in ["<", ">", ">=", "<=", "=="])
 
     transformTest do:
-      Condition(Call(%?isCond, $a, $b)) => $a
+      Condition(Call(%?isComp, $a, $b)) => $a
     do:
       mkCond(mkCall("<", mkLit(100), mkLit(200)))
     do:

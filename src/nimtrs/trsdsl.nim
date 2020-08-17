@@ -143,7 +143,6 @@ func parseTermPattern(
             vtable.usevar(vsym, VarSpec(decl: body, isNullable: nullable))
           else:
             vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
-
         of "*", "?", "+", "!":
           let nullable = if prefstr in ["*", "?"]: true else: nullable
           case body[0].kind:
@@ -190,10 +189,28 @@ func parseTermPattern(
         of "%?":
           let predc = body[1]
           predc.assertNodeIt(
-            predc.kind == nnkCall,
+            predc.kind in {nnkCall, nnkIdent},
             "Unexpected node kind",
             &"Node kind: {body[1].kind}")
 
+          case predc.kind:
+            of nnkCall:
+              result = newCall(
+                "makeFunctor",
+                @[
+                  predc[0],
+                  predc[0].toStrLit(),
+                  predc.mapIt(it.parseTermPattern(
+                    conf, nullable, vtable)).toBracketSeq()
+                ]
+              )
+            of nnkIdent:
+              result = mkCallNode(
+                "makeConstant", [vType, fType],
+                @[ predc, predc.toStrLit() ]
+              )
+            else:
+              raiseAssert("#[ DIE ]#")
         else:
           raiseCodeError(body[0], &"Unexpected prefix '{prefstr.toYellow()}'")
     of nnkIntLit:
@@ -211,6 +228,8 @@ func parseTermPattern(
               else: "<<<INVALID_PREFIX>>>"
 
           result = mkCallNode(callname, @[ elems.toBracketSeq() ])
+    of nnkStmtList:
+      return parseTermPattern(body[0], conf, nullable, vtable)
     else:
       raiseAssert(&"#[ IMPLEMENT for kind {body.kind} ]#")
 
@@ -324,6 +343,11 @@ func discardStmtList*(body: NimNode): NimNode =
     body[0]
   else:
     body
+
+macro makeMatchTerm*[V, F](impl: TermImpl[V, F], patt: untyped): untyped =
+  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+  let (matcher, vars) =  parseTermPattern(patt, conf)
+  return matcher
 
 macro matchWith*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patts: untyped): untyped =
