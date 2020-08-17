@@ -290,7 +290,7 @@ func makeFunctor*[V, F](
 func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
   makeFunctor(sym, toSeq(subt))
 
-# func makeFunctor*[V, F](sym: F, subt: varargs[TermPattern[V, F]]): Term[V, F]
+
 
 
 #===========================  Making patterns  ===========================#
@@ -322,7 +322,7 @@ func makeZeroOrMoreP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt))
 
 func makeZeroOrMoreP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  patt.makeTermP()
+  TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt.makeTermP()))
 
 func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkNegation, patt: mkIt(patt))
@@ -476,6 +476,12 @@ proc fromTerm*[V, F](
     )
 
   if term.getKind() == tkFunctor:
+    let fs = term.getFSym()
+    if not cb.isFunctorSym(fs):
+      raiseAssert(
+        &"Term uses {fs} as functor head," &
+          "but this is not a functor symbol according to implementation")
+
     result = cb.makeFunctor(
       term.getFSym(),
       term.getArguments().mapPairs(rhs.fromTerm(cb, path & @[lhs])))

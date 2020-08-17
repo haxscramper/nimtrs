@@ -106,6 +106,9 @@ func parseTermPattern(
             for arg in body[1..^1]:
               parseTermPattern(arg, conf, nullable, vtable)
 
+          # TODO add runtime assert with `CodeError` to check if
+          # implementation considers substituted term a functor. TODO
+          # - disable this check in non-debug build.
           result = mkCallNode("makeFunctor", @[
             ident(conf.fPrefix & id)] &
               args.mapIt(newCall("makePattern", it)), @[vType, fType])
@@ -161,6 +164,18 @@ func parseTermPattern(
               else: "<<<INVALID_PREFIX>>>"
 
           result = mkCallNode(callname, @[result])
+        of "*@":
+          let vsym = makeVarSym(body[1].strVal(), islist = true)
+
+          # TODO REFACTOR
+          result = mkCallNode("makeZeroOrMoreP", @[
+            mkCallNode("makeVariable", [vType, fType],
+                       makeInitAllFields(vsym))])
+
+          if conf.nodecl:
+            vtable.usevar(vsym, VarSpec(decl: body[1], isNullable: nullable))
+          else:
+            vtable.addvar(vsym, VarSpec(decl: body[1], isNullable: nullable))
         of "%", "%!":
           assertNodeIt(
             body[1],
@@ -310,12 +325,14 @@ macro matchWith*[V, F](
     termType = term.getTypeInst()
     resId = genSym(nskVar, ident = "res")
     termId = genSym(ident = "term")
+    foundId = genSym(nskVar, ident = "found")
 
   result = newStmtList()
 
   result.add quote do:
     var `resId`: Option[`termType`]
     let `termId` = `term`
+    var `foundId`: bool = false
 
   # echo patts.treeRepr()
 
@@ -331,16 +348,15 @@ macro matchWith*[V, F](
     let (matcher, vars) =  parseTermPattern(patt[1], conf)
     let generator = parseTermExpr(patt[2], conf, vars)
     result.add quote do:
-      if unifp(`matcher`, `termId`):
+      if (not `foundId`) and unifp(`matcher`, `termId`):
         `resId` = some(`generator`.substitute(env))
-        break matchWithBlock
 
   result.add quote do:
     `resId`
 
-  result = newBlockStmt(ident("matchWithBlock"), result)
+  result = newBlockStmt(result)
 
-  echo result.toStrLit()
+  # echo result.toStrLit()
 
 macro matchPattern*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =
@@ -391,12 +407,15 @@ macro matchPattern*[V, F](
     let vardecls = newStmtList(vardecls)
     let varassign = newStmtList(varassign)
     result = quote do:
+      # echo `patt`.exprRepr(`impl`)
       `vardecls`
       if `unifcall`:
         `varassign`
         true
       else:
         false
+
+    # echo result.toStrLit()
 
 macro matchPattern*[V, F](
   term: V, impl: TermImpl[V, F], patt: untyped): untyped =

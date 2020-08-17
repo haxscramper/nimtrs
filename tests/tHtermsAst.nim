@@ -2,7 +2,7 @@ import hmisc/helpers
 import nimtrs/[trscore, trspprint, trsdsl]
 import sequtils, strformat, strutils
 import hmisc/algo/halgorithm
-import hmisc/types/hnim_ast
+import hmisc/types/[hnim_ast, colorstring]
 import unittest, sets, options
 
 import hpprint, hpprint/hpprint_repr
@@ -54,9 +54,19 @@ func mkOp(op: AstKind, sub: seq[Ast]): Ast =
     else:
       raiseAssert("12")
 
-func objTreeRepr(a: Ast): ObjTree = discard
-  # case a.kind:
-  #   of akIntLit:
+func objTreeRepr(a: Ast): ObjTree =
+  case a.kind:
+    of akIntLit:
+      pptConst($a.intVal)
+    of akStrLit:
+      pptConst(a.strVal)
+    of akIdent:
+      pptObj("ident", pptConst(a.strVal))
+    else:
+      pptObj($a.kind, a.subnodes.mapIt(it.objTreeRepr()))
+
+func objTreeRepr(a: seq[Ast]): ObjTree =
+  a.mapIt(it.objTreeRepr()).pptSeq()
 
 func mkVal(val: int): Ast = Ast(kind: akIntLit, intVal: val)
 func mkIdent(val: string): Ast = Ast(kind: akIdent, strVal: val)
@@ -68,18 +78,41 @@ func mkCall(n: string, args: varargs[Ast]): Ast =
   Ast(kind: akCall,
       subnodes: @[mkIdent(n)] & args.mapIt(it))
 
+func exprRepr(a: Ast): string =
+  case a.kind:
+    of akIntLit:
+      ($a.intVal).toCyan()
+    of akStrLit:
+      a.strVal.toYellow()
+    of akIdent:
+      a.strVal.toGreen()
+    else:
+      a.subnodes.mapIt(it.exprRepr()).join(", ").wrap("[ ]")
 
 let cb = TermImpl[Ast, AstKind](
   getSym: (proc(n: Ast): AstKind = n.kind),
-  isFunctorSym: (proc(kind: AstKind): bool = kind in {akCall .. akCondition}),
+  isFunctorSym: (
+    proc(kind: AstKind): bool =
+      result = kind in {akCall .. akCondition}
+      # debugecho "Kind is functor? ", kind, ": ", result
+  ),
   makeFunctor: (
     proc(op: AstKind, sub: seq[Ast]): Ast =
-      result = Ast(kind: op); result.subnodes = sub
+      # debugecho "making functor for kind ", op
+      result = Ast(kind: op)
+      result.subnodes = sub
   ),
   getArguments: (proc(n: Ast): seq[Ast] = n.subnodes),
   # setSubt: (proc(n: var Ast, sub: seq[Ast]) = n.subnodes = sub),
-  valStrGen: (proc(n: Ast): string = "[[ TODO ]]"),
+  valStrGen: (proc(n: Ast): string = n.exprRepr()),
 )
+
+proc exprRepr(a: AstTerm |
+              TermPattern[Ast, AstKind] |
+              TermEnv[Ast, AstKind]
+             ): string = exprRepr(a, cb)
+proc exprRepr(elems: seq[AstTerm]): string =
+  elems.mapIt(it.exprRepr(cb)).join(", ").wrap(("[", "]"))
 
 
 proc cmpTerm*(term: AstTerm | Ast, val: Ast | AstTerm): void =
@@ -137,11 +170,11 @@ suite "Hterms ast rewriting":
 
     let inval = mkCond(mkCall("==", mkLit("999"), mkLit("999")))
 
-    if inval.matchPattern(cb, Condition($a)):
+    if inval.matchPattern(cb, Condition(Call(*@a))):
       echo a.objTreeRepr().treeRepr()
 
     transformTest do:
-      Condition(Call(%!mkIdent("=="), $a, $a)) => IntLit(1)
+      Condition(Call(%!mkIdent("=="), $a, $a)) => %!mkLit(1)
     do:
       inval
     do:
