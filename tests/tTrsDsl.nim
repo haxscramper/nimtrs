@@ -12,8 +12,6 @@ import hpprint/objdiff
 func toTerm*(impl: TermImpl[Arithm, ArithmOp], val: int): ATerm =
   nConst(val)
 
-# func
-
 suite "DSL":
   test "12":
     let term = mkOp(aopAdd, @[
@@ -75,3 +73,5 @@ suite "DSL":
 
       if 20 == 29:
         echo "123"
+
+  # test "Transformation uses":

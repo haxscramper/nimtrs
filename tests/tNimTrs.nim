@@ -124,7 +124,7 @@ proc makePatt(
 
 import unittest
 
-proc cmpTerm(term: TrmTerm | Trm, val: Trm | TrmTerm): void =
+proc cmpTerm*(term: TrmTerm | Trm, val: Trm | TrmTerm): void =
   let ok =
     (when term is TrmTerm: term.fromTerm() else: term) ==
     (when val is TrmTerm: val.fromTerm() else: val)

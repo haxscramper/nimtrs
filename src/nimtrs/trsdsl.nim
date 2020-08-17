@@ -161,10 +161,21 @@ func parseTermPattern(
               else: "<<<INVALID_PREFIX>>>"
 
           result = mkCallNode(callname, @[result])
+        of "%", "%!":
+          assertNodeIt(
+            body[1],
+            body[1].kind == nnkCall,
+            "Expected call node",
+            &"Kind is {body[1].kind}")
+
+          if prefstr == "%":
+            result = body[1]
+          else:
+            result = newCall("toTerm", body[1], ident conf.implId)
         else:
-          raiseAssert(&"#[ IMPLEMENT {body[0].strVal()} ]#")
+          raiseCodeError(body[0], &"Unexpected prefix '{prefstr.toYellow()}'")
     of nnkIntLit:
-      result = mkCallNode("toTerm", @[ident(conf.implId), body])
+      result = mkCallNode("toTerm", @[body, ident(conf.implId)])
     of nnkInfix:
       case body[0].strVal():
         of "&", "|":
@@ -286,6 +297,50 @@ macro initTRS*(impl: typed, body: untyped): untyped =
   result = initTRSImpl(makeGenParams(
     impl.getTypeInst()[2].getEnumPref(), impl) , body)
 
+func discardStmtList*(body: NimNode): NimNode =
+  if body.kind == nnkStmtList and body[0].kind == nnkStmtList:
+    body[0]
+  else:
+    body
+
+macro matchWith*[V, F](
+  term: Term[V, F], impl: TermImpl[V, F], patts: untyped): untyped =
+  let
+    conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+    termType = term.getTypeInst()
+    resId = genSym(nskVar, ident = "res")
+    termId = genSym(ident = "term")
+
+  result = newStmtList()
+
+  result.add quote do:
+    var `resId`: Option[`termType`]
+    let `termId` = `term`
+
+  # echo patts.treeRepr()
+
+  for idx, patt in patts.discardStmtList():
+    assertNodeIt(
+      patt,
+      (patt.kind == nnkInfix and patt[0].strVal == "=>"),
+      msgjoin("Expected match arm in form of",
+              "`<pattern> => <result>`".toYellow()),
+      &"Patter is {patt.kind}"
+    )
+
+    let (matcher, vars) =  parseTermPattern(patt[1], conf)
+    let generator = parseTermExpr(patt[2], conf, vars)
+    result.add quote do:
+      if unifp(`matcher`, `termId`):
+        `resId` = some(`generator`.substitute(env))
+        break matchWithBlock
+
+  result.add quote do:
+    `resId`
+
+  result = newBlockStmt(ident("matchWithBlock"), result)
+
+  echo result.toStrLit()
 
 macro matchPattern*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =
@@ -343,4 +398,7 @@ macro matchPattern*[V, F](
       else:
         false
 
-  # echo result.toStrLit()
+macro matchPattern*[V, F](
+  term: V, impl: TermImpl[V, F], patt: untyped): untyped =
+  quote do:
+    matchPattern(toTerm(`term`, `impl`), `impl`, `patt`)
