@@ -127,6 +127,10 @@ proc cmpTerm*(term: AstTerm | Ast, val: Ast | AstTerm): void =
     echo treeRepr(val, cb)
     raiseAssert("Fail")
 
+func toTerm(val: int, impl: TermImpl[Ast, AstKind]): AstTerm =
+  toTerm(mkVal(val), impl)
+
+
 template transformTest*(body: untyped, termIn, termOut: typed): untyped =
   static:
     echo astToStr(body)
@@ -164,9 +168,7 @@ suite "Hterms ast rewriting":
       fail()
       echo res.term.treeRepr(cb)
 
-  test "Pattern rewriting":
-    func toTerm(val: int, impl: TermImpl[Ast, AstKind]): AstTerm =
-      toTerm(mkVal(val), impl)
+  test "Pattern rewriting with value genertion via external function":
 
     let inval = mkCond(mkCall("==", mkLit("999"), mkLit("999")))
 
@@ -179,3 +181,24 @@ suite "Hterms ast rewriting":
       inval
     do:
       mkLit(1)
+
+  test "Pattern matching with predicates; functor head":
+    func isCond(f: AstKind): bool = (f == akCondition)
+
+    transformTest do:
+      %?isCond(Call($a, *_)) => $a
+    do:
+      mkCond(mkCall("<", mkLit(900), mkLit(100)))
+    do:
+      mkIdent("<")
+
+  test "Pattern matching with predicates; constant value":
+    func isComp(v: Ast): bool =
+      (v.kind == akIdent) and (v.strVal in ["<", ">", ">=", "<=", "=="])
+
+    transformTest do:
+      Condition(Call(%?isCond, $a, $b)) => $a
+    do:
+      mkCond(mkCall("<", mkLit(100), mkLit(200)))
+    do:
+      mkLit(100)

@@ -187,6 +187,13 @@ func parseTermPattern(
             result = body[1]
           else:
             result = newCall("toTerm", body[1], ident conf.implId)
+        of "%?":
+          let predc = body[1]
+          predc.assertNodeIt(
+            predc.kind == nnkCall,
+            "Unexpected node kind",
+            &"Node kind: {body[1].kind}")
+
         else:
           raiseCodeError(body[0], &"Unexpected prefix '{prefstr.toYellow()}'")
     of nnkIntLit:

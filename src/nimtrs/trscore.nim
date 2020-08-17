@@ -85,7 +85,6 @@ type
       of tkFunctor:
         functor: F
         arguments: SingleIt[Term[V, F]]
-        # subterms: seq[Term[V, F]]
       of tkConstant:
         csym: F
         value: V
