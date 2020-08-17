@@ -57,7 +57,13 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
     of tkList:
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
     of tkConstant:
-      "'" & cb.valStrGen(term.getValue()) & "'"
+      if term.predp():
+        raiseAssert("#[ IMPLEMENT ]#")
+      else:
+        if term.functorvalp():
+          $term.getFSym()
+        else:
+          "'" & cb.valStrGen(term.getValue()) & "'"
     of tkVariable:
       # debugecho term
       # tern(term.listvarp, "@", "_") &

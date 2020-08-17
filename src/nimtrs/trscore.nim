@@ -79,15 +79,47 @@ type
         discard
 
 
+  FuncHeadKind* = enum
+    fhkValue
+    fhkPredicate
+    fhkVariable
 
   Term*[V, F] = object
     case tkind*: TermKind
       of tkFunctor:
-        functor: F
+        case headKind: FuncHeadKind:
+          of fhkValue:
+            functor: F
+          of fhkPredicate:
+            funcPred: proc(fhead: F): bool {.noSideEffect.}
+            funcPredRepr: string
+            case bindHead: bool
+              of true:
+                headVar: VarSym
+              of false:
+                discard
+          of fhkVariable:
+            funcVariable: VarSym
+
         arguments: SingleIt[Term[V, F]]
       of tkConstant:
-        csym: F
-        value: V
+        case isPredicate: bool
+          of true:
+            constPred: proc(val: V): bool {.noSideEffect.}
+            constPredRepr: string
+            case bindConst: bool
+              of true:
+                constVar: VarSym
+              of false:
+                discard
+          of false:
+            case isFunctor: bool
+              of false:
+                csym: F
+                value: V
+              of true:
+                fsym: F
+
       of tkVariable:
         name: VarSym
       of tkList:
@@ -266,7 +298,22 @@ func makePlaceholder*[V, F](): Term[V, F] =
   Term[V, F](tkind: tkPlaceholder)
 
 func makeConstant*[V, F](val: V, csym: F): Term[V, F] =
-  Term[V, F](tkind: tkConstant, value: val, csym: csym)
+  Term[V, F](
+    isPredicate: false,
+    isFunctor: false,
+    tkind: tkConstant,
+    value: val,
+    csym: csym
+  )
+
+
+func makeConstant*[V, F](fsym: F): Term[V, F] =
+  Term[V, F](
+    isPredicate: false,
+    isFunctor: true,
+    tkind: tkConstant,
+    fsym: fsym
+  )
 
 func makeVariable*[V, F](name: string, isList: bool = false): Term[V, F] =
   Term[V, F](tkind: tkVariable, name: makeVarSym(name, isList))
@@ -282,9 +329,44 @@ func makeList*[V, F](elements: seq[Term[V, F]]): Term[V, F] =
 
 func makeFunctor*[V, F](
   sym: F, subt: seq[Term[V, F]]): Term[V, F] =
-  Term[V, F](tkind: tkFunctor,
-             functor: sym,
-             arguments: makeList(subt).mkIt())
+  Term[V, F](
+    headKind: fhkValue,
+    tkind: tkFunctor,
+    functor: sym,
+    arguments: makeList(subt).mkIt())
+
+func makeFunctor*[V, F](
+  headvar: VarSym, subt: seq[Term[V, F]]): Term[V, F] =
+  Term[V, F](
+    headKind: fhkVariable,
+    tkind: tkFunctor,
+    funcVariable: headvar,
+    arguments: makeList(subt).mkIt())
+
+func makeFunctor*[V, F](
+  funcPred: proc(fhead: F): bool {.noSideEffect.},
+  funcPredRepr: string,
+  subt: seq[Term[V, F]]): Term[V, F] =
+  Term[V, F](
+    funcPred: funcPred,
+    funcPredRepr: funcPredRepr,
+    headKind: fhkPredicate,
+    tkind: tkFunctor,
+    bindHead: false,
+    arguments: makeList(subt).mkIt())
+
+func makeFunctor*[V, F](
+  funcPred: proc(fhead: F): bool {.noSideEffect.},
+  funcPredRepr: string,
+  headVar: VarSym, subt: seq[Term[V, F]]): Term[V, F] =
+  Term[V, F](
+    funcPred: funcPred,
+    headKind: fhkPredicate,
+    funcPredRepr: funcPredRepr,
+    tkind: tkFunctor,
+    bindHead: true,
+    headVar: headVar,
+    arguments: makeList(subt).mkIt())
 
 func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
   makeFunctor(sym, toSeq(subt))
@@ -347,6 +429,13 @@ func `==`*(l: VarSym, str: string): bool =
 func listvarp*(vs: VarSym): bool = vs.isList
 func getVName*(vs: VarSym): string = vs.name
 func varp*[V, F](t: Term[V, F]): bool = (t.tkind == tkVariable)
+func predp*[V, F](t: Term[V, F]): bool =
+  (t.tkind == tkFunctor and t.headKind == fhkPredicate) or
+  (t.tkind == tkConstant and t.isPredicate)
+
+func functorvalp*[V, F](t: Term[V, F]): bool =
+  t.tkind == tkConstant and (not t.isPredicate) and t.isFunctor
+
 func listvarp*[V, F](t: Term[V, F]): bool =
   t.tkind == tkVariable and t.name.listvarp()
 
@@ -367,8 +456,12 @@ func getVName*[V, F](t: Term[V, F]): VarSym =
   t.name
 
 func getFSym*[V, F](t: Term[V, F]): F =
-  assert t.getKind() == tkFunctor
-  t.functor
+  assert t.getKind() == tkFunctor or
+    (t.getKind() == tkConstant and t.isFunctor)
+  if t.tkind == tkFunctor:
+    t.functor
+  else:
+    t.fsym
 
 func getSym*[V, F](t: Term[V, F]): F =
   ## Get functor symbols from term
@@ -1061,6 +1154,140 @@ func unifLists*[V, F](
       else:
         echoi level, "list unification failed"
 
+func unifFunctorHeads*[V, F](
+  term1, term2: Term[V, F],
+  env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
+  assert term1.tkind == tkFunctor and term2.tkind == tkFunctor
+  let noRes = none(TermEnv[V, F])
+
+
+  if term1.headKind == fhkPredicate or term2.headKind == fhkPredicate:
+    if term1.headKind == fhkPredicate and term2.headKind == fhkPredicate:
+      raiseAssert("Cannot unifty two functor heads with predicates")
+
+    else:
+      var fsym: F
+      let ordd: tuple[predc, nonPred: Term[V, F]] =
+        block:
+          let (predc, nonPred) =
+            if term1.headKind == fhkPredicate: (term1, term2)
+            else: (term2, term1)
+
+          if nonPred.headKind == fhkVariable:
+            let deref = env[nonPred.funcVariable]
+            let varstr = nonPred.funcVariable.exprRepr
+            if deref.tkind notin {tkConstant, tkFunctor}:
+              raiseAssert(msgjoin(
+                "Variable", varstr, "is bound to value of kind",
+                deref.tkind, "and cannot be unified with functor"))
+
+            if deref.isPredicate:
+              raiseAssert(msgjoin(
+                "Variable", varstr, "is bound to constant with predicate",
+                "and cannot be unified with functor"))
+
+            if not deref.isFunctor:
+              raiseAssert(msgjoin(
+                "Variable", varstr, "is bound to non-functor value"))
+
+            fsym = deref.fsym
+            (predc, deref)
+          else:
+            fsym = nonPred.functor
+            (predc, nonPred)
+
+      if ordd.predc.funcPred(fsym):
+        result = some(env)
+        if ordd.predc.bindHead:
+          if result.get().appendOrUnif(
+            ordd.predc.headVar, makeConstant[V, F](fsym)):
+            return
+          else:
+            return noRes
+      else:
+        return noRes
+  else:
+    let
+      k1 = term1.headKind
+      k2 = term2.headKind
+
+    if (k1, k2) == (fhkVariable, fhkVariable):
+      let
+        deref1 = env[term1.funcVariable]
+        deref2 = env[term2.funcVariable]
+
+      if (not deref1.isFunctor) or (not deref2.isFunctor):
+        raiseAssert(msgjoin(
+          "Term head is bound to non-functor variable"))
+
+    elif (k1, k2) == (fhkValue, fhkVariable):
+      let deref = env[term2.funcVariable]
+      assert deref.isFunctor
+      if term1.functor == deref.fsym:
+         result = some(env)
+         if result.get().appendOrUnif(term2.funcVariable, term1):
+           return
+         else:
+           return noRes
+
+    elif (k1, k2) == (fhkVariable, fhkValue):
+      let deref = env[term1.funcVariable]
+      assert deref.isFunctor
+      if term2.functor == deref.fsym:
+         result = some(env)
+         if result.get().appendOrUnif(term1.funcVariable, term2):
+           return
+         else:
+           return noRes
+
+    else:
+      if term1.functor == term2.functor:
+        result = some(env)
+      else:
+        return noRes
+
+
+func unifConstants*[V, F](
+  const1, const2: Term[V, F],
+  env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
+  assert const1.tkind == tkConstant and const2.tkind == tkConstant
+  let noRes = none(TermEnv[V, F])
+
+  if const1.isPredicate or const2.isPredicate:
+    if const1.isPredicate and const2.isPredicate:
+      raiseAssert("Cannot unify two predicates")
+    else:
+      let (predc, val) =
+        if const1.isPredicate: (const1, const2) else: (const2, const1)
+
+      if val.isFunctor:
+        raiseAssert("Cannot unify functor constant with other predicate")
+      else:
+        if predc.constPred(val.value):
+          result = some(env)
+          if predc.bindConst:
+            if result.get().appendOrUnif(predc.constVar, val):
+              return
+            else:
+              return noRes
+        else:
+          return noRes
+  else:
+    if const1.isFunctor != const2.isFunctor:
+      raiseAssert("Cannot compare functor constant with value")
+    else:
+      if const1.isFunctor:
+        if const1.fsym == const2.fsym:
+          return some(env)
+        else:
+          return noRes
+      else:
+        if const1.value == const2.value:
+          return some(env)
+        else:
+          return noRes
+
+
 
 func unif*[V, F](
   t1, t2: Term[V, F], env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
@@ -1092,10 +1319,11 @@ func unif*[V, F](
       k2 = getKind(val2)
 
     if k1 == tkConstant and k2 == tkConstant:
-      if val1 == val2:
-        result = some(env)
-      else:
-        result = none(TermEnv[V, F])
+      return unifConstants(val1, val2, env, level + 1)
+      # if val1 == val2:
+      #   result = some(env)
+      # else:
+      #   result = none(TermEnv[V, F])
     elif k1 == tkVariable:
       # result = some(bindTerm(val1, val2, env))
       result = some(env)
@@ -1129,11 +1357,15 @@ func unif*[V, F](
           "Cannot unify functor and non-functor directly. K1 is ", k1,
           " and K2 is ", k2))
 
-      if getFSym(val1) != getFSym(val2):
-        result = none(TermEnv[V, F])
+      result = unifFunctorHeads(val1, val2, env, level + 1)
+      if result.isNone():
+        return result
 
       result = unif(
-        val1.getArgumentList(), val2.getArgumentList(), env, level + 1)
+        val1.getArgumentList(),
+        val2.getArgumentList(),
+        result.get(), level + 1
+      )
 
   plog:
     if result.isSome():

@@ -496,6 +496,22 @@ suite "Pattern matching":
         assert unifRes.isNone()
 
 
+  test "Predicates for functors":
+    let term1 = nT(nT(20), nT(30)).toTerm()
+    let term2 = makeFunctor[Trm, TrmKind](
+      (proc(head: TrmKind): bool = debugecho "Testing term"; true),
+      "(((?)))",
+       makeVarSym("a", false),
+      @[
+        makePattern(makeZeroOrMoreP(makePlaceholder[Trm, TrmKind]()))
+      ]
+    )
+
+    if unifp(term1, term2):
+      echo env.exprRepr()
+
+
+
 suite "Nim trs reduction rule search":
   test "Rewrite constant":
     let (term, ok, _) = nConst(12).reduce(makeSystem({
@@ -608,6 +624,7 @@ suite "Nim trs reduction rule search":
                 _ii -> tmkF('10', '666')
                 _ee -> '777'
               }""".dedent
+
 
 
   test "Reduction system event-driven iteration":
