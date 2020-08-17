@@ -267,29 +267,29 @@ proc pprintCalls*(node: NimNode, level: int): void =
     else:
       echo ($node.toStrLit()).indent(level * 2)
 
-func makeGenParams*(fPrefix, impl: NimNode): GenParams =
+func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
   impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
-  assertNodeIt(
-    fPrefix,
-    fPrefix.kind in {nnkStrLit, nnkIdent},
-    "Expected string literal or ident for functor prefix")
+  # assertNodeIt(
+  #   fPrefix,
+  #   fPrefix.kind in {nnkStrLit, nnkIdent},
+  #   "Expected string literal or ident for functor prefix")
 
   let implType = impl.getTypeInst()
   result = GenParams(
      vName: implType[1].strVal(),
      fName: implType[2].strVal(),
-     fPrefix: fPrefix.strVal(),
+     fPrefix: fPrefix,
      implId: impl.strVal()
    )
 
-macro initTRS*(fPrefix: string, impl: typed, body: untyped): untyped =
-  result = initTRSImpl(makeGenParams(fPrefix, impl) , body)
+macro initTRS*(impl: typed, body: untyped): untyped =
+  result = initTRSImpl(makeGenParams(
+    impl.getTypeInst()[2].getEnumPref(), impl) , body)
 
 
 macro matchPattern*[V, F](
-  term: Term[V, F], fPrefix: string, impl: TermImpl[V, F],
-  patt: untyped): untyped =
-  let conf = makeGenParams(fPrefix, impl)
+  term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =
+  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
   let (patt, vars) = patt.parseTermPattern(conf)
   let unifcall = newCall("unifp", term, patt)
   var

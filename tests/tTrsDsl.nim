@@ -12,6 +12,8 @@ import hpprint/objdiff
 func toTerm*(impl: TermImpl[Arithm, ArithmOp], val: int): ATerm =
   nConst(val)
 
+# func
+
 suite "DSL":
   test "12":
     let term = mkOp(aopAdd, @[
@@ -20,15 +22,15 @@ suite "DSL":
     ]).toTerm(arithmImpl)
 
     when false: # NOTE compilation ERROR test
-      discard initTRS("aop", arithmImpl):
+      discard initTRS(arithmImpl):
         Add($a, 0) => Succ(@a)
 
     when false: # NOTE compilation ERROR test
-      discard initTRS("aop", arithmImpl):
+      discard initTRS(arithmImpl):
         Add($a, 0) => Succ($a, $b)
 
     when true:
-      let trs = initTRS("aop", arithmImpl):
+      let trs = initTRS(arithmImpl):
         Add($a, 0) => $a
         Add($a, Succ($b)) => Succ(Add($a, $b))
         Mult($a, 0) => 0
@@ -41,7 +43,7 @@ suite "DSL":
 
   test "Use in macro":
     template matchPatternNim(term: NodeTerm, patt: untyped): untyped =
-      matchPattern(term, "nnk", nimAstImpl, patt)
+      matchPattern(term, nimAstImpl, patt)
 
     macro ifTest(body: untyped): untyped =
       for stmt in body:
