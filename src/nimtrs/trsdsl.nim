@@ -200,7 +200,7 @@ func parseTermPattern(
                 @[
                   predc[0],
                   predc[0].toStrLit(),
-                  predc.mapIt(it.parseTermPattern(
+                  predc[1..^1].mapIt(it.parseTermPattern(
                     conf, nullable, vtable)).toBracketSeq()
                 ]
               )
