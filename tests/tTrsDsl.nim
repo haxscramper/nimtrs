@@ -9,7 +9,7 @@ import hmisc/algo/[halgorithm, hseq_mapping]
 import ../src/nimtrs/[trscore, trsdsl, nimast_trs]
 import hpprint/objdiff
 
-func toTerm*(impl: TermImpl[Arithm, ArithmOp], val: int): ATerm =
+func toTerm*(val: int, impl: TermImpl[Arithm, ArithmOp]): ATerm =
   nConst(val)
 
 suite "DSL":

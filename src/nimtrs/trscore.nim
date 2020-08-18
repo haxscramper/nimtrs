@@ -2,6 +2,10 @@
 ## values/types from terms.
 
 import hashes, sequtils, tables, strformat, strutils, sugar, macros
+import hmisc/types/seq2d
+import hmisc/helpers
+
+import hdrawing, hdrawing/term_buf
 import options
 import deques, intsets, sets
 export tables, intsets
@@ -103,15 +107,16 @@ type
 
         arguments: SingleIt[Term[V, F]]
       of tkConstant:
+        case bindConst: bool
+          of true:
+            constVar: VarSym
+          of false:
+            discard
+
         case isPredicate: bool
           of true:
             constPred: proc(val: V): bool {.noSideEffect.}
             constPredRepr*: string
-            case bindConst: bool
-              of true:
-                constVar: VarSym
-              of false:
-                discard
           of false:
             case isFunctor: bool
               of false:
@@ -294,6 +299,15 @@ func parseVarSym*(str: string): VarSym =
   elif str[0] == '$': makeVarSym(str[1..^1], false)
   else: makeVarSym(str, false)
 
+func parseVarSym*(node: NimNode): VarSym =
+  assert node.kind == nnkPrefix and node[1].kind == nnkIdent
+  if node[0] == ident("@"):
+    makeVarSym(node[1].strval(), true)
+  elif node[0] == ident("$"):
+    makeVarSym(node[1].strval(), false)
+  else:
+    raiseAssert("Invalid prefix for varsym")
+
 func makePlaceholder*[V, F](): Term[V, F] =
   Term[V, F](tkind: tkPlaceholder)
 
@@ -324,8 +338,20 @@ func makeConstant*[V, F](fsym: F): Term[V, F] =
     fsym: fsym
   )
 
+func makeConstant*[V, F](val: V, csym: F, constVar: VarSym): Term[V, F] =
+  Term[V, F](
+    isPredicate: false,
+    tkind: tkConstant,
+    isFunctor: false,
+    bindConst: true,
+    csym: csym,
+    value: val,
+    # bindVar: true,
+    constVar: constVar)
+
 func makeVariable*[V, F](name: string, isList: bool = false): Term[V, F] =
   Term[V, F](tkind: tkVariable, name: makeVarSym(name, isList))
+
 
 # func makeVariableFunctor*[V, F](vsym: VarSym, islist: bool = false)
 
@@ -419,6 +445,12 @@ func makeZeroOrMoreP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
 func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkNegation, patt: mkIt(patt))
 
+
+func makeTermPattern*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
+  patt
+
+func makeTermPattern*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  patt.makeTermP()
 
 #============================  Aux functions  ============================#
 
@@ -555,6 +587,169 @@ func hasForceTry[V, F](rule: RulePair[V, F]): bool =
   ## matcher)
   rule.matchers.forceTry.len > 0
 
+#===========================  pretty-printing  ===========================#
+func treeRepr*[V, F](term: Term[V, F],
+                     cb: TermImpl[V, F], depth: int = 0): string =
+  let ind = "  ".repeat(depth)
+  case getKind(term):
+    of tkConstant:
+      return cb.valStrGen(getValue(term))
+        .split("\n").mapIt(ind & "cst " & it).join("\n")
+    of tkPlaceholder:
+      return ind & "plh _"
+    of tkVariable:
+      return ind & "var " & getVName(term).exprRepr()
+    of tkFunctor:
+      return (
+        @[ ind & "fun " & $(getFSym(term)) ] &
+        getArguments(term).mapIt(treeRepr(it, cb, depth + 1))
+      ).join("\n")
+    of tkList:
+      return (@[ ind & "lst"] & getElements(term).mapIt(
+        treeRepr(it, cb, depth + 1))).join("\n")
+    of tkPattern:
+      &"{ind} <<<PATTERN TREE REPR>>>"
+
+func treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
+  let ind = "  ".repeat(depth)
+  if cb.isFunctor(val):
+    return (
+      @[ ind & "fun " & $(cb.getSym(val)) ] &
+      cb.getArguments(val).mapIt(treeRepr(it, cb, depth + 1))
+    ).join("\n")
+  else:
+    return cb.valStrGen(val)
+      .split("\n").mapIt(ind & "cst " & it).join("\n")
+
+func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
+  case term.getKind():
+    of tkPattern:
+      term.getPatt().exprRepr(cb)
+# func exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+      # raiseAssert("#[ IMPLEMENT ]#")
+    of tkList:
+      "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
+    of tkConstant:
+      if term.predp():
+        "%?".toMagenta() & term.constPredRepr
+      else:
+        if term.functorvalp():
+          $term.getFSym()
+        else:
+          "'" & cb.valStrGen(term.getValue()) & "'"
+    of tkVariable:
+      # debugecho term
+      # tern(term.listvarp, "@", "_") &
+        term.getVName().exprRepr()
+    of tkFunctor:
+      let args =
+        term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
+      case term.headKind:
+        of fhkValue:
+          if ($getSym(term)).validIdentifier():
+            $getSym(term) & "(" & term.getArguments().mapIt(
+              it.exprRepr(cb)).join(", ") & ")"
+          else:
+            let subt = term.getArguments()
+            case subt.len():
+              of 1: &"{term.getSym()}({subt[0]})"
+              of 2: &"{subt[0]} {term.getSym()} {subt[1]}"
+              else: args
+
+        of fhkPredicate:
+          "%?".toMagenta() & term.funcPredRepr &
+            term.bindvarp().tern(&"[{term.getVname().exprRepr()}]", "") &
+            args
+        of fhkVariable:
+          &"[{term.getVName().exprRepr().toYellow()}]({args})"
+
+    of tkPlaceholder:
+      "_"
+
+func exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf
+func exprRepr*[V, F](matcher: TermMatcher[V, F], cb: TermImpl[V, F]): TermBuf =
+  let header = matcher.isPattern.tern(
+    exprRepr(matcher.patt, cb), "func"
+  ).toTermBufFast()
+  # var tmp: Seq2D[TermBuf]
+  # tmp.appendRow(@[
+
+  # ], emptyTermBuf)
+
+  var subvars: Seq2D[TermBuf]
+  for varn, subp in matcher.subpatts:
+    subvars.appendRow(
+      @[
+        (varn.exprRepr() & ": ").toTermBufFast(),
+        subp.exprReprImpl(cb)
+      ],
+      emptyTermBuf
+    )
+
+  if subvars.len > 0:
+    result = subvars.toTermBuf()
+    result = @[@[header], @[result]].toTermBuf()
+  else:
+    result = header
+
+
+func exprRepr*[V, F](env: TermEnv[V, F], cb: TermImpl[V, F], forceOneLine: bool = false): string =
+  if env.len > 3 and not forceOneLine:
+    "{\n" & env.mapPairs(&"  {lhs.exprRepr()} -> {rhs.exprRepr(cb)}").joinl() & "\n}"
+  else:
+    "{" & env.mapPairs(
+      &"({lhs.exprRepr()} -> {rhs.exprRepr(cb)})"
+    ).join(" ") & "}"
+
+func exprReprImpl*[V, F](matchers: MatcherList[V, F], cb: TermImpl): TermBuf =
+  var blocks: Seq2D[TermBuf]
+  for idx, patt in matchers.patterns:
+    let pref: string = if matchers.patterns.len == 1: "" else: $idx & ": "
+    let bufs = @[pref.toTermBufFast(), patt.exprRepr(cb)]
+    blocks.appendRow(bufs, emptyTermBuf)
+
+  return blocks.toTermBuf()
+
+func exprReprImpl*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): seq[TermBuf] =
+  let rhs: TermBuf = rule.gen.isPattern.tern(
+    exprRepr(rule.gen.patt),
+    "func"
+  ).toTermBufFast()
+
+  return @[ rule.matchers.exprReprImpl(cb), (" ~~> ").toTermBufFast(), rhs ]
+
+func exprRepr*[V, F](rule: RulePair[V, F], cb: TermImpl[V, F]): string =
+  @[exprReprImpl(rule, cb)].toTermBuf().toString()
+
+func exprReprImpl*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): TermBuf =
+  sys.mapPairs(
+    @[ ($idx & ": ").toTermBufFast() ] & rhs.exprReprImpl(cb)
+  ).toTermBuf()
+
+func exprRepr*[V, F](sys: RedSystem[V, F], cb: TermImpl[V, F]): string =
+  exprReprImpl(sys, cb).toString().split("\n").mapIt(
+    it.strip(leading = false)).join("\n")
+
+func exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
+  case expr.kind:
+    of tpkTerm:
+      expr.term.getIt().exprRepr(cb)
+    of tpkConcat:
+      expr.patterns.mapIt(it.exprRepr(cb)).join(" & ").wrap("{}")
+    of tpkAlternative:
+      expr.patterns.mapIt(it.exprRepr(cb)).join(" | ").wrap("{}")
+    of tpkZeroOrMore, tpkOptional, tpkNegation:
+      let pref = case expr.kind:
+        of tpkZeroOrMore: "*"
+        of tpkOptional: "?"
+        of tpkNegation: "!"
+        else: ""
+
+      pref & expr.patt.getIt().exprRepr(cb).wrap("()")
+
+
+
+
 #=======================  converting to/from term  =======================#
 
 proc isFunctor*[V, F](cb: TermImpl[V, F], val: V): bool =
@@ -575,27 +770,25 @@ proc fromTerm*[V, F](
   ## `term` MUST be fully substituted - e.g. no placeholder or
   ## variable terms must be present in tree.
   if term.getKind() notin {tkFunctor, tkConstant, tkList}:
-    raiseGenEx(
+    raiseAssert(
       "Cannot convert under-substituted term back to tree. " &
-      $term.getKind() & " has to be replaced with value",
-      case term.getKind():
-        of tkVariable:
-          SubstitutionErrorInfo(
-            path: path,
-            kind: tkVariable,
-            vname: term.getVName()
-          )
-        else:
-          SubstitutionErrorInfo(path: path)
+      $term.getKind() & " has to be replaced with value" &
+      "Term: " & term.exprRepr(cb)
     )
 
   if term.getKind() == tkFunctor:
     mixin exprRepr
+    template compilesOrElse(body, elseval: untyped): untyped =
+      when compiles(body):
+        body
+      else:
+        elseval
+
     if term.headKind != fhkValue:
       raiseAssert(msgjoin(
         "Cannot convert under-substituted term back to tree.",
-        "Functor head `", term.exprRepr(cb),
-        "` has to be replaced with value"
+        "Functor head ", compilesOrElse(term.exprRepr(cb).wrap("``"), ""),
+        " has to be replaced with value"
       ))
 
     let fs = term.getFSym()
@@ -613,6 +806,11 @@ proc fromTerm*[V, F](
     result = cb.makeList(elems)
   else:
     result = term.getValue()
+
+
+
+
+
 
 #==================================  2  ==================================#
 proc assertCorrect*[V, F](impl: TermImpl[V, F]): void =
@@ -1069,6 +1267,20 @@ func partialMatch[V, F](
       if resenv.isSome():
         env = resenv.get()
         pos = endpos
+    of tpkAlternative:
+      block altTries:
+        for alt in patt.patterns:
+          let (resenv, endpos) = partialMatch(elems, pos, alt, env, level + 1)
+          iflet (env = resenv):
+            pos = endpos
+            break altTries # NOTE no backtracking is performed right
+            # now - first matchin alternative at point is accepted
+            # each time. Attempts are not resumed if subsequent
+            # matches fail.
+          else:
+            discard
+
+        return noRes
     else:
       raiseAssert("#[ IMPLEMENT ]#")
 

@@ -8,7 +8,8 @@ import hmisc/types/[colorstring, initcalls]
 
 type
   GenParams = object
-    vName, fName, fPrefix, termId, implId: string
+    vName, fName: NType
+    fPrefix, termId, implId: string
     nodecl: bool
 
   VarSpec = object
@@ -91,10 +92,11 @@ template mapItInfix*(topInfix: NimNode, op: untyped): untyped =
   res
 
 func parseTermPattern(
-  body: NimNode, conf: GenParams, nullable: bool, vtable: var VarTable): NimNode =
+  body: NimNode, conf: GenParams,
+  nullable: bool, vtable: var VarTable): NimNode =
   let
-    fType = mkNType(conf.fName)
-    vType = mkNType(conf.vName)
+    fType = conf.fName
+    vType = conf.vName
 
   case body.kind:
     of nnkCall:
@@ -120,7 +122,7 @@ func parseTermPattern(
           if conf.nodecl: vtable.usevar(vsym, spec)
           else: vtable.addvar(vsym, spec)
 
-          debugecho vsym
+          # debugecho vsym
 
           result = mkCallNode(
             "makeFunctor", [vType, fType],
@@ -131,11 +133,26 @@ func parseTermPattern(
               ).toBracketSeq()
             ]
           )
+        of nnkStrLit:
+          result = mkCallNode(
+            # dotHead = (ident conf.implId),
+            name = "makeFunctor",
+            # gentypes = [vType, fType],
+            args = @[body[0],
+              body[1..^1].mapIt(
+                it.parseTermPattern(conf, nullable, vtable).mkCallNode(
+                  "makePattern")
+              ).toBracketSeq()
+            ])
+
+          # debugecho "\e[31m-----------\e[39m"
+          # debugecho result.treeRepr()
+          # debugecho result.toStrLit().strVal()
+          # {.noSideEffect.}:
+          #   pprintCalls result, 0
         else:
           raiseCodeError(
-            body[0],
-            "Unexpected node kind",
-            &"{body[0].kind}")
+            body[0], "Unexpected node kind", &"{body[0].kind}")
 
     of nnkIdent:
       let str = body.strVal()
@@ -202,10 +219,44 @@ func parseTermPattern(
             "Expected call node",
             &"Kind is {body[1].kind}")
 
-          if prefstr == "%":
-            result = body[1]
-          else:
-            result = newCall("toTerm", body[1], ident conf.implId)
+          case body[1][0].kind:
+            of nnkBracketExpr:
+              let brac = body[1][0]
+              # debugecho body.treeRepr()
+              let
+                vsym = parseVarSym(brac[1])
+                varspec = VarSpec(decl: brac[1], isNullable: nullable)
+
+
+              if conf.nodecl:
+                if vsym.listvarp():
+                  raiseCodeError(
+                    brac[1], "Cannot use list variable as capture on the RHS")
+
+                vtable.usevar(vsym, varspec)
+
+              else:
+                vtable.addvar(vsym, varspec)
+
+              let valcall = newCall(brac[0], body[1][1..^1])
+              result = mkCallNode(
+                "makeConstant",
+                [vType, fType],
+                @[
+                  valcall,
+                  # newCall("toTerm", valcall, ident conf.implId),
+                  (ident conf.implId).mkCallNode("getSym", @[ valcall ]),
+                  makeInitAllFields(vsym),
+                ]
+              )
+            of nnkIdent:
+              if prefstr == "%":
+                result = body[1]
+              else:
+                result = newCall("toTerm", body[1], ident conf.implId)
+            else:
+              raiseCodeError(
+                body[1][0], &"Unexpected kind `{body[1][0].kind}`")
         of "%?":
           let predc = body[1]
           predc.assertNodeIt(
@@ -247,7 +298,8 @@ func parseTermPattern(
               of "|": "makeOrP"
               else: "<<<INVALID_PREFIX>>>"
 
-          result = mkCallNode(callname, @[ elems.toBracketSeq() ])
+          result = mkCallNode(callname, @[ elems.mapIt(
+            newCall("makeTermPattern", it)).toBracketSeq() ])
     of nnkStmtList:
       return parseTermPattern(body[0], conf, nullable, vtable)
     else:
@@ -302,7 +354,7 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
                        newCall("makeGenerator", generator))
 
 
-  # echov result.toStrLit()
+  echov result.toStrLit()
 
 
 func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
@@ -325,9 +377,10 @@ func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
   #   "Expected string literal or ident for functor prefix")
 
   let implType = impl.getTypeInst()
+  # debugecho implType.treeRepr()
   result = GenParams(
-     vName: implType[1].strVal(),
-     fName: implType[2].strVal(),
+     vName: implType[1].mkNType(),
+     fName: implType[2].mkNType(),
      fPrefix: fPrefix,
      implId: impl.strVal()
    )
@@ -349,8 +402,15 @@ macro makeMatchTerm*[V, F](impl: TermImpl[V, F], patt: untyped): untyped =
 
 macro matchWith*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patts: untyped): untyped =
+  let conf =
+    block:
+      let fType = impl.getTypeInst()[2]
+      if fType.isEnum():
+        makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+      else:
+        makeGenParams("", impl)
+
   let
-    conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
     termType = term.getTypeInst()
     resId = genSym(nskVar, ident = "res")
     termId = genSym(ident = "term")
@@ -375,6 +435,7 @@ macro matchWith*[V, F](
     )
 
     let (matcher, vars) =  parseTermPattern(patt[1], conf)
+    matcher.pprintCalls(0)
     let generator = parseTermExpr(patt[2], conf, vars)
     result.add quote do:
       if (not `foundId`) and unifp(`matcher`, `termId`):
@@ -385,7 +446,7 @@ macro matchWith*[V, F](
 
   result = newBlockStmt(result)
 
-  # echo result.toStrLit()
+  result.colorPrint()
 
 macro matchPattern*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =
@@ -397,7 +458,7 @@ macro matchPattern*[V, F](
     varassign: seq[NimNode]
 
   let
-    vtype = ident(conf.vName)
+    vtype = toNimNode(conf.vName)
 
   for varsym, spec in vars:
     let

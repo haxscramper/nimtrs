@@ -1,5 +1,6 @@
 import sugar, strutils, sequtils, strformat, sets, options
 import hmisc/[helpers]
+import hmisc/types/colorstring
 import nimtrs/[trscore, trspprint, trsdsl]
 
 #===========================  implementation  ============================#
