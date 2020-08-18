@@ -327,6 +327,8 @@ func makeConstant*[V, F](fsym: F): Term[V, F] =
 func makeVariable*[V, F](name: string, isList: bool = false): Term[V, F] =
   Term[V, F](tkind: tkVariable, name: makeVarSym(name, isList))
 
+# func makeVariableFunctor*[V, F](vsym: VarSym, islist: bool = false)
+
 func makeVariable*[V, F](vsym: VarSym): Term[V, F] =
   Term[V, F](tkind: tkVariable, name: vsym)
 
@@ -465,11 +467,18 @@ func getKind*[V, F](t: Term[V, F]): TermKind =
   t.tkind
 
 func getVName*[V, F](t: Term[V, F]): VarSym =
-  assert t.getKind() == tkVariable
-  t.name
+  assert t.getKind() == tkVariable or (
+    t.getKind() == tkFunctor and
+    t.headKind == fhkVariable
+  )
+
+  if t.getKind() == tkVariable:
+    t.name
+  else:
+    t.funcVariable
 
 func getFSym*[V, F](t: Term[V, F]): F =
-  assert t.getKind() == tkFunctor or
+  assert (t.getKind() == tkFunctor and t.headKind == fhkValue) or
     (t.getKind() == tkConstant and t.isFunctor)
   if t.tkind == tkFunctor:
     t.functor
@@ -581,6 +590,14 @@ proc fromTerm*[V, F](
     )
 
   if term.getKind() == tkFunctor:
+    mixin exprRepr
+    if term.headKind != fhkValue:
+      raiseAssert(msgjoin(
+        "Cannot convert under-substituted term back to tree.",
+        "Functor head `", term.exprRepr(cb),
+        "` has to be replaced with value"
+      ))
+
     let fs = term.getFSym()
     if not cb.isFunctorSym(fs):
       raiseAssert(
@@ -861,8 +878,7 @@ func contains*[V, F](env: TermEnv[V, F], vsym: VarSym): bool =
   vsym in env.values
 
 func contains*[V, F](env: TermEnv[V, F], term: Term[V, F]): bool =
-  assert term.getkind == tkVariable
-  term.name in env.values
+  term.getVName() in env.values
 
 func contains*[V, F](env: TermEnv[V, F], vname: string): bool =
   vname.parseVarSym() in env.values
@@ -1233,25 +1249,44 @@ func unifFunctorHeads*[V, F](
         raiseAssert(msgjoin(
           "Term head is bound to non-functor variable"))
 
-    elif (k1, k2) == (fhkValue, fhkVariable):
-      let deref = env[term2.funcVariable]
-      assert deref.isFunctor
-      if term1.functor == deref.fsym:
-         result = some(env)
-         if result.get().appendOrUnif(term2.funcVariable, term1):
-           return
-         else:
-           return noRes
+    elif (k1, k2) in [(fhkValue, fhkVariable), (fhkVariable, fhkValue)]:
+      let t: tuple[tvar, tval: Term[V, F]] =
+        if (k1, k2) == (fhkValue, fhkVariable):
+          (term2, term1)
+        else:
+          (term1, term2)
 
-    elif (k1, k2) == (fhkVariable, fhkValue):
-      let deref = env[term1.funcVariable]
-      assert deref.isFunctor
-      if term2.functor == deref.fsym:
-         result = some(env)
-         if result.get().appendOrUnif(term1.funcVariable, term2):
-           return
-         else:
-           return noRes
+      if t.tvar in env:
+        let deref = env[t.tvar.funcVariable]
+        assert deref.isFunctor
+        if t.tval.functor == deref.fsym:
+           result = some(env)
+           if result.get().appendOrUnif(
+             t.tvar.funcVariable,
+             makeConstant[V, F](deref.getFsym)):
+             return
+           else:
+             return noRes
+      else:
+        result = some(env)
+        if result.get().appendOrUnif(
+          t.tvar.funcVariable,
+          makeConstant[V, F](t.tval.getFsym)):
+          return
+        else:
+          return noRes
+
+
+
+    # elif (k1, k2) == (fhkVariable, fhkValue):
+    #   let deref = env[term1.funcVariable]
+    #   assert deref.isFunctor
+    #   if term2.functor == deref.fsym:
+    #      result = some(env)
+    #      if result.get().appendOrUnif(term1.funcVariable, term2):
+    #        return
+    #      else:
+    #        return noRes
 
     else:
       if term1.functor == term2.functor:
@@ -1434,7 +1469,43 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
 
 func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
   ## Substitute all variables in term with their values from environment
-  result = term
+  case term.getKind():
+    of tkConstant:
+      return term
+    of tkVariable:
+      if term.getVName() in env:
+        return term.dereference(env)
+      else:
+        discard # NOTE possible error
+
+    of tkFunctor:
+      case term.headKind:
+        of fhkValue:
+          return makeFunctor(
+            term.getFSym(),
+            term.getArguments().mapIt(substitute(it, env)))
+        of fhkPredicate:
+          raiseAssert("Cannot subsitute head for functor with predicate")
+        of fhkVariable:
+          if term.getVName() in env:
+            let value = env[term.getVName()]
+            if not value.functorvalp():
+              raiseAssert(msgjoin(
+                "Variable", term.getVName(),
+                "is bound to non-functor value"))
+            else:
+              return makeFunctor(
+                value.getFSym(),
+                term.getArguments.mapIt(
+                  substitute(it, env)))
+    of tkPlaceholder:
+      return term
+    of tkList:
+      return makeList(term.getElements().mapIt(substitute(it, env)))
+    of tkPattern:
+      raiseAssert("#[ Cannot subsitute value into from pattern ]#")
+
+
   for (v, path) in term.varlist():
     if env.isBound(getVName(v)):
       result.setAtPath(path, v.dereference(env))

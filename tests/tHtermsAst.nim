@@ -1,6 +1,6 @@
 import hmisc/helpers
 import nimtrs/[trscore, trspprint, trsdsl]
-import sequtils, strformat, strutils
+import sequtils, strformat, strutils, macros
 import hmisc/algo/halgorithm
 import hmisc/types/[hnim_ast, colorstring]
 import unittest, sets, options
@@ -200,3 +200,11 @@ suite "Hterms ast rewriting":
       mkCond(mkCall("<", mkLit(100), mkLit(200)))
     do:
       mkLit(100)
+
+  test "Pattern matching; copy functor head":
+    transformTest do:
+      [$head](Call(*_)) => [$head](%!mkCall("+", mkLit(1)))
+    do:
+      mkCond(mkCall("!", mkLit(100)))
+    do:
+      mkCond(mkCall("+", mkLit(1)))

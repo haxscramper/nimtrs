@@ -69,6 +69,8 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
       # tern(term.listvarp, "@", "_") &
         term.getVName().exprRepr()
     of tkFunctor:
+      let args =
+        term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
       case term.headKind:
         of fhkValue:
           if ($getSym(term)).validIdentifier():
@@ -79,15 +81,14 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
             case subt.len():
               of 1: &"{term.getSym()}({subt[0]})"
               of 2: &"{subt[0]} {term.getSym()} {subt[1]}"
-              else:
-                $term.getSym() & "(" & subt.mapIt(it.exprRepr(cb)).join(", ") & ")"
+              else: args
 
         of fhkPredicate:
           "%?".toMagenta() & term.funcPredRepr &
             term.bindvarp().tern(&"[{term.getVname().exprRepr()}]", "") &
-            term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
-        else:
-          raiseAssert("#[ IMPLEMENT ]#")
+            args
+        of fhkVariable:
+          &"[{term.getVName().exprRepr().toYellow()}]({args})"
 
     of tkPlaceholder:
       "_"

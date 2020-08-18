@@ -13,6 +13,7 @@ type
 
   VarSpec = object
     isNullable: bool
+    isFunc: bool
     decl: NimNode
 
   VarTable = Table[VarSym, VarSpec]
@@ -98,8 +99,6 @@ func parseTermPattern(
   case body.kind:
     of nnkCall:
       case body[0].kind:
-        of nnkAccQuoted:
-          raiseAssert("#[ IMPLEMENT ]#")
         of nnkIdent:
           let id = body[0].strVal()
           let args = collect(newSeq):
@@ -114,8 +113,29 @@ func parseTermPattern(
               args.mapIt(newCall("makePattern", it)), @[vType, fType])
 
 
+        of nnkBracket:
+          let
+            vsym = parseVarSym(body[0][0].toStrLit().strVal())
+            spec = VarSpec(decl: body, isNullable: nullable, isfunc: true)
+          if conf.nodecl: vtable.usevar(vsym, spec)
+          else: vtable.addvar(vsym, spec)
+
+          debugecho vsym
+
+          result = mkCallNode(
+            "makeFunctor", [vType, fType],
+            @[
+              makeInitAllFields(vsym),
+              body[1..^1].mapIt(
+                it.parseTermPattern(conf, nullable, vtable)
+              ).toBracketSeq()
+            ]
+          )
         else:
-          raiseAssert(&"#[ IMPLEMENT for kind {body[0].kind} ]#")
+          raiseCodeError(
+            body[0],
+            "Unexpected node kind",
+            &"{body[0].kind}")
 
     of nnkIdent:
       let str = body.strVal()
@@ -296,28 +316,6 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
         node.toStrLit().strVal().toYellow(), "' of type",
         node.getTypeInst().toStrLit().strVal().toYellow()
     ))
-
-proc pprintCalls*(node: NimNode, level: int): void =
-  let pref = "  ".repeat(level)
-  let pprintKinds = {nnkCall, nnkPrefix, nnkBracket}
-  case node.kind:
-    of nnkCall:
-      echo pref, $node[0].toStrLit()
-      if node[1..^1].noneOfIt(it.kind in pprintKinds):
-        echo pref, node[1..^1].mapIt($it.toStrLit()).join(", ").toYellow()
-      else:
-        for arg in node[1..^1]:
-          pprintCalls(arg, level + 1)
-    of nnkPrefix:
-      echo pref, node[0]
-      pprintCalls(node[1], level)
-    of nnkBracket:
-      for subn in node:
-        pprintCalls(subn, level + 1)
-    of nnkIdent:
-      echo pref, ($node).toGreen()
-    else:
-      echo ($node.toStrLit()).indent(level * 2)
 
 func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
   impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
