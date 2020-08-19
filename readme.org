@@ -92,6 +92,43 @@ approach, but more suitable for nim case objects.
 This 'implementation' is passed to ~toTerm~ and ~fromTerm~ converters
 to convert value of type ~V~ to ~Term[V, F]~.
 
+#+begin_src nim
+  import nimtrs/[trscore, trspprint, trsdsl, nimast_trs]
+  import options
+
+  template matchPatternNim(term: NodeTerm, patt: untyped): untyped =
+    matchPattern(term, nimAstImpl, patt)
+
+  macro ifTest(body: untyped): untyped =
+    for stmt in body:
+      let term = stmt.toTerm(nimAstImpl)
+      if term.matchPatternNim(
+        IfStmt(*ElifBranch(@conds, @bodies) & ?Else(elsebody))):
+
+        for cond in conds:
+          echo cond.lispRepr()
+
+        if elsebody.isSome():
+          echo "Else is some: ", elsebody.get().lispRepr()
+
+  ifTest:
+    if 12 == 22:
+      echo "123"
+    elif false:
+      echo "123"
+    else:
+      echo "123123"
+
+    if 20 == 29:
+      echo "123"
+
+#+end_src
+
+#+RESULTS:
+: (Infix (Ident "==") (IntLit 12) (IntLit 22))
+: (Ident "false")
+: Else is some: (StmtList (Command (Ident "echo") (StrLit "123123")))
+: (Infix (Ident "==") (IntLit 20) (IntLit 29))
 
 
 ** Pattern matching

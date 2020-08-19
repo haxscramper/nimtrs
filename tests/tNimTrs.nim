@@ -511,6 +511,22 @@ suite "Pattern matching":
     if unifp(term1, term2):
       echo env.exprRepr()
 
+  test "Concat with last optional":
+    let term1 = nT(nT(20)).toTerm()
+    let term2 = makeFunctor[Trm, TrmKind](
+      tmkF, @[
+        makePattern(makeAndP(@[
+          makeTermPattern makePlaceholder[Trm, TrmKind](),
+          makeOptP makePlaceholder[Trm, TrmKind]()
+        ]))
+      ]
+    )
+
+    if unifp(term1, term2):
+      discard
+    else:
+      fail("Unification failed")
+
 
 
 suite "Nim trs reduction rule search":

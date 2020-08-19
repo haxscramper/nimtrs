@@ -78,8 +78,19 @@ let arithmImpl* = TermImpl[Arithm, ArithmOp](
       result.tsubt = sub
   ),
   getArguments: (proc(n: Arithm): seq[Arithm] = n.tsubt),
-  valStrGen: (proc(n: Arithm): string = "[[ TODO ]]"),
+  valStrGen: (proc(n: Arithm): string = "0"),
 )
+
+proc exprRepr*(
+  val: TermEnv[Arithm, ArithmOp] |
+  Term[Arithm, ArithmOp] |
+  RedSystem[Arithm, ArithmOp] |
+  TermPattern[Arithm, ArithmOp]): string =
+  exprRepr(val, arithmImpl)
+
+proc exprRepr*(elems: seq[ATerm]): string =
+  elems.mapIt(it.exprRepr(arithmImpl)).join(", ").wrap(("[", "]"))
+
 
 
 let rSystem* = makeReductionSystem(

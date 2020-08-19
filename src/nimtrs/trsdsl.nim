@@ -354,7 +354,7 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
                        newCall("makeGenerator", generator))
 
 
-  echov result.toStrLit()
+  # echov result.toStrLit()
 
 
 func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =

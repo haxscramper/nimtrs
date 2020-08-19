@@ -2,8 +2,9 @@
 ## values/types from terms.
 
 import hashes, sequtils, tables, strformat, strutils, sugar, macros
-import hmisc/types/seq2d
+import hmisc/types/[seq2d, colorstring]
 import hmisc/helpers
+export colorstring
 
 import hdrawing, hdrawing/term_buf
 import options
@@ -434,7 +435,7 @@ func makeOptP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt))
 
 func makeOptP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  patt.makeTermP()
+  TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt.makeTermP()))
 
 func makeZeroOrMoreP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
   TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt))
@@ -499,15 +500,15 @@ func getKind*[V, F](t: Term[V, F]): TermKind =
   t.tkind
 
 func getVName*[V, F](t: Term[V, F]): VarSym =
-  assert t.getKind() == tkVariable or (
-    t.getKind() == tkFunctor and
-    t.headKind == fhkVariable
-  )
-
-  if t.getKind() == tkVariable:
+  if t.tkind == tkVariable:
     t.name
-  else:
+  elif t.tkind == tkFunctor and t.headKind == fhkVariable:
     t.funcVariable
+  elif t.bindvarp():
+    t.headVar
+  else:
+    raiseAssert("Invalid term to get variable name from")
+
 
 func getFSym*[V, F](t: Term[V, F]): F =
   assert (t.getKind() == tkFunctor and t.headKind == fhkValue) or
@@ -625,8 +626,6 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
   case term.getKind():
     of tkPattern:
       term.getPatt().exprRepr(cb)
-# func exprRepr*[V, F](expr: TermPattern[V, F], cb: TermImpl[V, F]): string =
-      # raiseAssert("#[ IMPLEMENT ]#")
     of tkList:
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
     of tkConstant:
@@ -638,12 +637,11 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
         else:
           "'" & cb.valStrGen(term.getValue()) & "'"
     of tkVariable:
-      # debugecho term
-      # tern(term.listvarp, "@", "_") &
-        term.getVName().exprRepr()
+      term.getVName().exprRepr()
     of tkFunctor:
       let args =
         term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
+      debugecho term.headKind
       case term.headKind:
         of fhkValue:
           if ($getSym(term)).validIdentifier():
@@ -652,8 +650,8 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
           else:
             let subt = term.getArguments()
             case subt.len():
-              of 1: &"{term.getSym()}({subt[0]})"
-              of 2: &"{subt[0]} {term.getSym()} {subt[1]}"
+              of 1: &"{term.getSym()}({subt[0].exprRepr(cb)})"
+              of 2: &"{subt[0].exprRepr(cb)} {term.getSym()} {subt[1].exprRepr(cb)}"
               else: args
 
         of fhkPredicate:

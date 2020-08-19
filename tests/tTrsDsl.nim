@@ -12,6 +12,7 @@ import hpprint/objdiff
 func toTerm*(val: int, impl: TermImpl[Arithm, ArithmOp]): ATerm =
   nConst(val)
 
+
 suite "DSL":
   test "12":
     let term = mkOp(aopAdd, @[
@@ -45,6 +46,7 @@ suite "DSL":
 
     macro ifTest(body: untyped): untyped =
       for stmt in body:
+        echo stmt.treeRepr()
         let term = stmt.toTerm(nimAstImpl)
         if term.matchPatternNim(
           IfStmt(*ElifBranch(@conds, @bodies) & ?Else(elsebody))):
@@ -58,6 +60,8 @@ suite "DSL":
             assert bodies.len == 2
           else:
             assert conds.len == 1
+        else:
+          echo "does not match"
 
       when false: # this is a TEST for compilation error
         if term.matchPatternNim(IfStmt($hello, @hello)):
@@ -71,7 +75,6 @@ suite "DSL":
       else:
         echo "123123"
 
+    ifTest:
       if 20 == 29:
         echo "123"
-
-  # test "Transformation uses":

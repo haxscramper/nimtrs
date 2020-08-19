@@ -6,6 +6,7 @@ export macros, halgorithm
 
 type
   NodeTerm* = Term[NimNode, NimNodeKind]
+  NodePatt* = TermPattern[NimNode, NimNodeKind]
   NodeReduction* = RedSystem[NimNode, NimNodeKind]
   NodeMatcher* = TermMatcher[NimNode, NimNodeKind]
   NodeEnv* = TermEnv[NimNode, NimNodeKind]
@@ -65,6 +66,13 @@ proc fromTerm*(nt: NodeTerm): NimNode =
 
 proc treeRepr*(nt: NodeTerm): string =
   treeRepr(nt, nimAstImpl)
+
+
+proc exprRepr*(val: NodeEnv | NodeTerm | NodePatt): string =
+  exprRepr(val, nimAstImpl)
+
+proc exprRepr*(elems: seq[NodeTerm]): string =
+  elems.mapIt(it.exprRepr(nimAstImpl)).join(", ").wrap(("[", "]"))
 
 proc buildPatternDecl(
   node: NimNode, path: seq[int],
