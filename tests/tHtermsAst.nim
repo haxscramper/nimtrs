@@ -136,12 +136,12 @@ template transformTest*(body: untyped, termIn, termOut: typed): untyped =
   let termRes = matchWith(termIn1, cb):
     body
 
+  echo "input___: ", termIn1.exprRepr(cb)
+  echo "expected: ", termOut.toTerm(cb).exprRepr(cb)
   if termRes.isSome():
     let res = termRes.get().fromTerm(cb)
     cmpTerm res, termOut
   else:
-    echo "input:\n", termIn1.exprRepr(cb)
-    echo "expected:\n", termOut.toTerm(cb).exprRepr(cb)
     fail("Rewrite is none")
 
 
@@ -208,3 +208,11 @@ suite "Hterms ast rewriting":
       mkCond(mkCall("!", mkLit(100)))
     do:
       mkCond(mkCall("+", mkLit(1)))
+
+  test "Pattern matching; splice functor arguments":
+    transformTest do:
+      Condition(Call(*@b)) => Call(@b)
+    do:
+      mkCond(mkCall("&", mkLit(100)))
+    do:
+      mkCall("&", mkLit(100))

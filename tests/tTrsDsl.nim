@@ -46,10 +46,10 @@ suite "DSL":
 
     macro ifTest(body: untyped): untyped =
       for stmt in body:
-        echo stmt.treeRepr()
+        # echo stmt.treeRepr()
         let term = stmt.toTerm(nimAstImpl)
         if term.matchPatternNim(
-          IfStmt(*ElifBranch(@conds, @bodies) & ?Else(elsebody))):
+          IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
 
           assert conds is seq[NimNode]
           assert bodies is seq[NimNode]

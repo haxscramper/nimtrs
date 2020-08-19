@@ -103,6 +103,16 @@ func parseTermPattern(
       case body[0].kind:
         of nnkIdent:
           let id = body[0].strVal()
+          if id[0].isLowerAscii():
+            # TODO genrate list of possible functor heads (from enum
+            # implementation) and compare to used identifier.
+            if not id.startsWith(conf.fPrefix):
+              raiseCodeError(
+                body[0],
+                "Functor identifer must either be " &
+                  "uppercase or start with functor prefix",
+                &"Expected prefix {conf.fPrefix}")
+
           let args = collect(newSeq):
             for arg in body[1..^1]:
               parseTermPattern(arg, conf, nullable, vtable)
@@ -159,14 +169,18 @@ func parseTermPattern(
       if str == "_":
         result = mkCallNode("makePlaceholder", [vType, fType])
       else:
-        let vsym = parseVarSym(str)
-        result = mkCallNode("makeVariable", [vType, fType],
-                               makeInitAllFields(vsym))
+        raiseCodeError(
+          body, "Lowercase identifier without prefix used as variable",
+          &"Use `${str}` scalar or `@{str}` for list variable")
 
-        if conf.nodecl:
-          vtable.usevar(vsym, VarSpec(decl: body, isNullable: nullable))
-        else:
-          vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
+        # let vsym = parseVarSym(str)
+        # result = mkCallNode("makeVariable", [vType, fType],
+        #                        makeInitAllFields(vsym))
+
+        # if conf.nodecl:
+        #   vtable.usevar(vsym, VarSpec(decl: body, isNullable: nullable))
+        # else:
+        #   vtable.addvar(vsym, VarSpec(decl: body, isNullable: nullable))
     of nnkPrefix:
       let prefstr = body[0].strval()
       case prefstr:
@@ -435,7 +449,7 @@ macro matchWith*[V, F](
     )
 
     let (matcher, vars) =  parseTermPattern(patt[1], conf)
-    matcher.pprintCalls(0)
+    # matcher.pprintCalls(0)
     let generator = parseTermExpr(patt[2], conf, vars)
     result.add quote do:
       if (not `foundId`) and unifp(`matcher`, `termId`):
@@ -446,7 +460,7 @@ macro matchWith*[V, F](
 
   result = newBlockStmt(result)
 
-  result.colorPrint()
+  # result.colorPrint()
 
 macro matchPattern*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =

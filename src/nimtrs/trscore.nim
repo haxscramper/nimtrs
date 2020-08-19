@@ -641,7 +641,7 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
     of tkFunctor:
       let args =
         term.getArguments().mapIt(it.exprRepr(cb)).join(", ").wrap("()")
-      debugecho term.headKind
+      # debugecho term.headKind
       case term.headKind:
         of fhkValue:
           if ($getSym(term)).validIdentifier():
@@ -795,6 +795,10 @@ proc fromTerm*[V, F](
         &"Term uses {fs} as functor head," &
           "but this is not a functor symbol according to implementation")
 
+    # var arguments: seq[V]
+    # for idx, arg in term.getArguments():
+    #   if arg.listvarp():
+    #     for val in
     result = cb.makeFunctor(
       term.getFSym(),
       term.getArguments().mapPairs(rhs.fromTerm(cb, path & @[lhs])))
@@ -1698,8 +1702,21 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
       term = value
       # assert false, "Cannot assign to constant: " & $term & " = " & $value
 
+func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F]
+func substElements*[V, F](
+  args: seq[Term[V, F]], env: TermEnv[V, F]): seq[Term[V, F]] =
+  # var args: seq[Term[V, F]]
+  for arg in args:
+    # echov arg.exprRepr()
+    if arg.listvarp(): # Always splice list variables
+      for value in env[arg].getElements():
+        result.add value.substitute(env)
+    else:
+      result.add arg.substitute(env)
+
 func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
   ## Substitute all variables in term with their values from environment
+  mixin exprRepr
   case term.getKind():
     of tkConstant:
       return term
@@ -1714,7 +1731,9 @@ func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
         of fhkValue:
           return makeFunctor(
             term.getFSym(),
-            term.getArguments().mapIt(substitute(it, env)))
+            term.getArguments().substElements(env)
+            # .mapIt(substitute(it, env))
+          )
         of fhkPredicate:
           raiseAssert("Cannot subsitute head for functor with predicate")
         of fhkVariable:
@@ -1726,13 +1745,14 @@ func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
                 "is bound to non-functor value"))
             else:
               return makeFunctor(
-                value.getFSym(),
-                term.getArguments.mapIt(
-                  substitute(it, env)))
+                value.getFSym(), term.getArguments().substElements(env))
+
     of tkPlaceholder:
       return term
     of tkList:
-      return makeList(term.getElements().mapIt(substitute(it, env)))
+      return makeList(term.getElements().substElements(env)
+      # .mapIt(substitute(it, env))
+      )
     of tkPattern:
       raiseAssert("#[ Cannot subsitute value into from pattern ]#")
 

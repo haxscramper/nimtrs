@@ -92,6 +92,14 @@ approach, but more suitable for nim case objects.
 This 'implementation' is passed to ~toTerm~ and ~fromTerm~ converters
 to convert value of type ~V~ to ~Term[V, F]~.
 
+*** Variables
+
+*** Environment
+
+*** Unification
+
+** Pattern matching
+
 #+begin_src nim
   import nimtrs/[trscore, trspprint, trsdsl, nimast_trs]
   import options
@@ -102,24 +110,24 @@ to convert value of type ~V~ to ~Term[V, F]~.
   macro ifTest(body: untyped): untyped =
     for stmt in body:
       let term = stmt.toTerm(nimAstImpl)
-      #                      ^^^^^^^^^^ 
-      #                      'Implementation' - used for converting 
+      #                      ^^^^^^^^^^
+      #                      'Implementation' - used for converting
       #                       value of type `V` to term.
       if term.matchPatternNim(
-      # Match head of the `term` 
+      # Match head of the `term`
       # |      Match pattern one or more times
-      # |      |Match `nnkElifBrach` - `nnk` prefix might be omiited 
+      # |      |Match `nnkElifBrach` - `nnk` prefix might be omiited
       # |      ||  Concatenation of two parts Optional artument in the term
-      # v      vv                           v v
+      # v_____ vv_________                  v v
         IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
         #      A           ^       ^      A         ^^^^^^^^^
         #      !           |_______|      !         Possible nullable variable,
-        #      !           |              !         inserted as `seq[F]`       
+        #      !           |              !         inserted as `seq[F]`
         #      !           |              !
         #      !           Two list variables, will be inserted as `seq[V]`
-        #      [ This part will consume as]                               
-        #      [ as much functor arguments]                               
-        #      [ as possible.             ]                               
+        #      [ This part will consume as]
+        #      [ as much functor arguments]
+        #      [ as possible.             ]
 
         for cond in conds:
           echo cond.lispRepr()
@@ -145,8 +153,6 @@ to convert value of type ~V~ to ~Term[V, F]~.
 : Has `else`
 : (Infix (Ident "==") (IntLit 20) (IntLit 29))
 
-
-** Pattern matching
 
 ** AST templating
 
