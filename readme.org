@@ -102,14 +102,30 @@ to convert value of type ~V~ to ~Term[V, F]~.
   macro ifTest(body: untyped): untyped =
     for stmt in body:
       let term = stmt.toTerm(nimAstImpl)
+      #                      ^^^^^^^^^^ 
+      #                      'Implementation' - used for converting 
+      #                       value of type `V` to term.
       if term.matchPatternNim(
-        IfStmt(*ElifBranch(@conds, @bodies) & ?Else(elsebody))):
-
+      # Match head of the `term` 
+      # |      Match pattern one or more times
+      # |      |Match `nnkElifBrach` - `nnk` prefix might be omiited 
+      # |      ||  Concatenation of two parts Optional artument in the term
+      # v      vv                           v v
+        IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
+        #      A         ^^^^^^  ^^^^^^^  A ^^^^^^^^^^^^^^^^
+        #      !           |_______|      !   Possible nullable variable,
+        #      !           |              !   inserted as `seq[F]`
+        #      !           |              !
+        #      !           Two list variables, will be inserted as `seq[V]`
+        #      [ This part will consume as]                               
+        #      [ as much functor arguments]                               
+        #      [ as possible.             ]                               
+               
         for cond in conds:
           echo cond.lispRepr()
 
         if elsebody.isSome():
-          echo "Else is some: ", elsebody.get().lispRepr()
+          echo "Has `else`"
 
   ifTest:
     if 12 == 22:
@@ -121,13 +137,12 @@ to convert value of type ~V~ to ~Term[V, F]~.
 
     if 20 == 29:
       echo "123"
-
 #+end_src
 
 #+RESULTS:
 : (Infix (Ident "==") (IntLit 12) (IntLit 22))
 : (Ident "false")
-: Else is some: (StmtList (Command (Ident "echo") (StrLit "123123")))
+: Has `else`
 : (Infix (Ident "==") (IntLit 20) (IntLit 29))
 
 
