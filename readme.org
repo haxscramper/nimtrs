@@ -2,11 +2,14 @@
 
 Ast pattern matching, templating and rewriting. Supports regex-like
 patterns for sequences. Is not tied to particular AST - ~NimNode~ is
-supported, but not the *only* type of AST.
+supported, but *not the only* type of AST.
 
 * Features
 
 ** Core concepts
+
+This library is build around prolog-like unification algorithm and
+term notion. This terminology is used in documentation/API etc.
 
 *** ~Term~
 
@@ -18,8 +21,8 @@ Term is either of
 - pattern ~*(12 | 13) & $a~
 
 All of the functions and types in the library have to generic
-parameters: ~V~ and ~F~. First one is a type of constants (values),
-second one type of a functor.
+parameters: ~V~ and ~F~. First one (~V~ )is a *type of constants*
+(values), second one (~F~) *type of a functor symbol*.
 
 # NOTE mathematical expressions are a good example for actually
 # rewriting things
@@ -29,7 +32,7 @@ second one type of a functor.
 - If you want to model mathematical expressions ~F~ would be a string
   and ~V~ in integer type. Possible example of a functor: ~cos(0.2)~
   or ~sin($a + $b)~. Note: ~+~ is also a functor - binary operator is
-  just a 2-ary function.
+  just a 2-ary function. # in nim code it would be ~func `+`(a, b: int): int~
 - For working with nim ast functor head is a ~NimNodeKind~ and
   constant is a ~NimNode~. For example for expression like ~3 + 3~ we
   get ast dump (in lisp form) that looks like this. ~Infix~ is a
@@ -160,6 +163,37 @@ not present in AST - things like ~StmtList~ is just another functor
 
 
 ** AST templating
+
+Generate term with variables and then substitute them from
+environment. Examples of use (pretty simple but should illustrate the
+point).
+
+#+begin_src nim
+  import nimtrs/[trscore, trspprint, trsdsl, nimast_trs]
+    # import options
+
+  template makeNimTerm(body: untyped): untyped =
+    makeTerm(nimAstImpl, body)
+
+  macro templating(arg: untyped): untyped =
+    let env = makeEnvironment(@{
+      parseVarSym("$a") : arg.toTerm()
+    })
+
+    let templ = makeNimTerm:
+      IfStmt(
+        ElifBranch($a, %!ident("hello"))
+      )
+
+    let res = templ.substitute(env).fromTerm()
+    echo res.toStrLit()
+
+  templating(1 + 2)
+#+end_src
+
+#+RESULTS:
+: if 1 + 2:
+:   hello
 
 ** Rewriting
 
