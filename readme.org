@@ -112,15 +112,15 @@ to convert value of type ~V~ to ~Term[V, F]~.
       # |      ||  Concatenation of two parts Optional artument in the term
       # v      vv                           v v
         IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
-        #      A         ^^^^^^  ^^^^^^^  A ^^^^^^^^^^^^^^^^
-        #      !           |_______|      !   Possible nullable variable,
-        #      !           |              !   inserted as `seq[F]`
+        #      A           ^       ^      A         ^^^^^^^^^
+        #      !           |_______|      !         Possible nullable variable,
+        #      !           |              !         inserted as `seq[F]`       
         #      !           |              !
         #      !           Two list variables, will be inserted as `seq[V]`
         #      [ This part will consume as]                               
         #      [ as much functor arguments]                               
         #      [ as possible.             ]                               
-               
+
         for cond in conds:
           echo cond.lispRepr()
 
