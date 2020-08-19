@@ -63,6 +63,7 @@ parameters: ~V~ and ~F~. First one (~V~ )is a *type of constants*
     (Infix (Ident "+") (IntLit 3) (IntLit 3))
   #+end_src
 
+Functor parts (terminology used)
 #+begin_src text
           Functor argument /list/
           |
@@ -120,6 +121,8 @@ There are two types of variables - *scalar* and *list*.
   succedes/. List variable is always bound to list term but spliced
   into arguments on ~fromTerm~ conversion.
 
+NOTE: ~ex~ and ~exUnif~ are simpler helper templates defined in
+[[file:src/nimtrs/doc_example.nim]]
 #+begin_src nim :exports both
   echo "--- Single use of scalar variable ---"
   exUnif(ex(Condition($a)), ex(Condition(%!mkLit("hello"))))
@@ -320,8 +323,8 @@ point).
 ** Term construction DSL
 
 Pattern matching DSL is intentionally similar to EBNF grammar from
-[[https://github.com/haxscramper/hparse#dsl-syntax][hparse dsl]]. Of course there are differences, but I tried to keep them
-as close as possible.
+[[https://github.com/haxscramper/hparse#dsl-syntax][hparse dsl]]. Of course there are differences, but I tried to keep DSLs
+as similar as possible.
 
 NOTE: there are some missing pieces (alternatives, ~`interpol`~
 syntax), but it works /in general/ (passes test suite at least).
@@ -353,6 +356,7 @@ syntax), but it works /in general/ (passes test suite at least).
   - ~*E2~ zero-or-more matches of ~E2~
   - ~?E1~ Optional match of ~E1~
 
+-------------------------------------------------------------------
 
 - [1] alternative is not actually supported right now as it requires
   *much* more more work than any other pattern. Reason? supporting
@@ -409,6 +413,13 @@ questions there.
 - [ ] support ~`functor`(`value`)~ to interpolate
   variables/expressions from surrounding environment (similar to
   ~quote do:~)
+- [ ] Fully support operations on lists
+- [ ] Implement alternative and negation for pattern matchin
+- [ ] Suppoirt ~`interpol`~ syntax for pattern description to splice
+  values.
+- [ ] Debugging (pretty printing or something similar (simple
+  pretty-printing is not going to cut it for large terms. Need good
+  tool for visualizing and debugging failed unification)).
 
 ** COMMENT misc
 
