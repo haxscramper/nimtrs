@@ -8,6 +8,8 @@ supported, but not the *only* type of AST.
 
 ** Core concepts
 
+*** ~Term~
+
 Term is either of
 - variable : ~$a~ or ~@a~
 - constant : ~1, 3, 4~
@@ -29,16 +31,67 @@ second one type of a functor.
   or ~sin($a + $b)~. Note: ~+~ is also a functor - binary operator is
   just a 2-ary function.
 - For working with nim ast functor head is a ~NimNodeKind~ and
-  constant is a ~NimNode~.
-  #+begin_src nim :exports both
-    dumpLisp(3 + 3)
+  constant is a ~NimNode~. For example for expression like ~3 + 3~ we
+  get ast dump (in lisp form) that looks like this. ~Infix~ is a
+  functor head, ~(Ident "+")~ is a *constant* since it is *not
+  possible* for it to have arguments.
+  #+begin_src lisp
+    (Infix (Ident "+") (IntLit 3) (IntLit 3))
   #+end_src
 
-  #+RESULTS:
-  : (Infix
-  :  (Ident "+")
-  :  (IntLit 3)
-  :  (IntLit 3))
+*** ~TermImpl~
+
+Terms are build as /heterogenous/ representation for trees - there is
+only single type for functor head, but since constants themself can
+differ (~(IntLit 3)~ and ~(Ident "+")~) it is necessary to distinguish
+between them somehow.
+
+One possible soltion is to take OOP-style approach and model term as a
+object hierarchy, with each one implementing some kind of ~isConstant~
+and ~getFunctorSymbol~ methods. This library uses somewhat similar
+approach, but more suitable for nim case objects.
+
+#+caption: TermImpl for nim node
+#+begin_src nim
+  func isFunctor*(nnk: NimNodeKind): bool =
+    nnk notin { # set of node kinds that cannot be considered 'functor'.
+                # I.e. it is not possible to have a child for
+                # `nnkFloatLit` for example, therefore it is not a
+                # functor.
+      nnkNone, nnkEmpty, nnkNilLit, # Empty node
+      nnkCharLit..nnkUInt64Lit, # Int literal
+      nnkFloatLit..nnkFloat64Lit, # Float literal
+      nnkStrLit..nnkTripleStrLit, nnkCommentStmt, nnkIdent, nnkSym # Str lit
+    }
+
+  const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
+    getsym: ( # Get functor symbol from value. `V -> F`
+      proc(n: NimNode): NimNodeKind = n.kind
+    ),
+    isFunctorSym: ( # Check if functor is a symbol. `F -> bool`
+      proc(kind: NimNodeKind): bool = kind.isFunctor()
+    ),
+    makeFunctor: ( # Construct functor from head symbol and list of
+                   # arguments. `F x seq[V] -> V`
+      proc(op: NimNodeKind, sub: seq[NimNode]): NimNode =
+        if sub.len == 0: newNimNode(op)
+        else: newTree(op, sub)
+    ),
+    getArguments: ( # Get list of arguments from term. No checking is
+                    # necessary - only functor terms would be queried
+                    # for arguments. `V -> seq[V]`
+      proc(n: NimNode): seq[NimNode] = toSeq(n.children)
+    ),
+    valStrGen: ( # Generate string representation for term. Used for
+                 # pretty-printing terms. `V -> string`
+      proc(n: NimNode): string = n.toStrLit().strVal()
+    ),
+  )
+#+end_src
+
+This 'implementation' is passed to ~toTerm~ and ~fromTerm~ converters
+to convert value of type ~V~ to ~Term[V, F]~.
+
 
 
 ** Pattern matching

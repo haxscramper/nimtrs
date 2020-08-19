@@ -11,7 +11,10 @@ type
   NodeEnv* = TermEnv[NimNode, NimNodeKind]
 
 func isFunctor*(nnk: NimNodeKind): bool =
-  nnk notin {
+  nnk notin { # set of node kinds that cannot be considered 'functor'.
+              # I.e. it is not possible to have a child for
+              # `nnkFloatLit` for example, therefore it is not a
+              # functor.
     nnkNone, nnkEmpty, nnkNilLit, # Empty node
     nnkCharLit..nnkUInt64Lit, # Int literal
     nnkFloatLit..nnkFloat64Lit, # Float literal
@@ -19,15 +22,27 @@ func isFunctor*(nnk: NimNodeKind): bool =
   }
 
 const nimAstImpl* = TermImpl[NimNode, NimNodeKind](
-  getsym: (proc(n: NimNode): NimNodeKind = n.kind),
-  isFunctorSym: (proc(kind: NimNodeKind): bool = kind.isFunctor()),
-  makeFunctor: (
+  getsym: ( # Get functor symbol from value. `V -> F`
+    proc(n: NimNode): NimNodeKind = n.kind
+  ),
+  isFunctorSym: ( # Check if functor is a symbol. `F -> bool`
+    proc(kind: NimNodeKind): bool = kind.isFunctor()
+  ),
+  makeFunctor: ( # Construct functor from head symbol and list of
+                 # arguments. `F x seq[V] -> V`
     proc(op: NimNodeKind, sub: seq[NimNode]): NimNode =
       if sub.len == 0: newNimNode(op)
       else: newTree(op, sub)
   ),
-  getArguments: (proc(n: NimNode): seq[NimNode] = toSeq(n.children)),
-  valStrGen: (proc(n: NimNode): string = n.toStrLit().strVal()),
+  getArguments: ( # Get list of arguments from term. No checking is
+                  # necessary - only functor terms would be queried
+                  # for arguments. `V -> seq[V]`
+    proc(n: NimNode): seq[NimNode] = toSeq(n.children)
+  ),
+  valStrGen: ( # Generate string representation for term. Used for
+               # pretty-printing terms. `V -> string`
+    proc(n: NimNode): string = n.toStrLit().strVal()
+  ),
 )
 
 func makeNimNodeVariable*(name: VarSym): NodeTerm =
