@@ -1,0 +1,58 @@
+#+title: nimtrs
+
+Ast pattern matching, templating and rewriting. Supports regex-like
+patterns for sequences. Is not tied to particular AST - ~NimNode~ is
+supported, but not the *only* type of AST.
+
+* Features
+
+** Core concepts
+
+Term is either of
+- variable : ~$a~ or ~@a~
+- constant : ~1, 3, 4~
+- list : ~[t1, t2, t3, ...]~
+- functor head + list of arguments (other terms) : ~f(t1, t2, t3 ...)~
+- pattern ~*(12 | 13) & $a~
+
+All of the functions and types in the library have to generic
+parameters: ~V~ and ~F~. First one is a type of constants (values),
+second one type of a functor.
+
+# NOTE mathematical expressions are a good example for actually
+# rewriting things
+
+# ~sin($a + $b)~ can be rewritten into  = (sin($a) * cos($b)) + (cos($a) * sin($b))~
+
+- If you want to model mathematical expressions ~F~ would be a string
+  and ~V~ in integer type. Possible example of a functor: ~cos(0.2)~
+  or ~sin($a + $b)~. Note: ~+~ is also a functor - binary operator is
+  just a 2-ary function.
+- For working with nim ast functor head is a ~NimNodeKind~ and
+  constant is a ~NimNode~.
+  #+begin_src nim :exports both
+    dumpLisp(3 + 3)
+  #+end_src
+
+  #+RESULTS:
+  : (Infix
+  :  (Ident "+")
+  :  (IntLit 3)
+  :  (IntLit 3))
+
+
+** Pattern matching
+
+** AST templating
+
+** Rewriting
+
+
+* Development
+
+# TODO build documentation and upload it on github-pages.
+
+Some things are informally described in [[file:devnotes.org]], most of the
+functions and types are documented in the source code. If you have any
+additional questions feel free to join my [[https://discord.gg/ZnBB4E][discord server]] and ask
+questions there.

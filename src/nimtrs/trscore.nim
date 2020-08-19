@@ -1294,7 +1294,7 @@ func unif*[V, F](elems: seq[Term[V, F]],
                  level: int,
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
   ## Unify `patt` to elements in `elems` using environment `env`. If
-  ## `fullMatch` is true yield some() environment only if input
+  ## `fullMatch` is true return `some() `environment only if input
   ## sequence matcher completely. Otherwise repeatedly apply pattern
   ## on sequence.
   if fullMatch:
@@ -1330,10 +1330,13 @@ func unif*[V, F](elems: seq[Term[V, F]],
 func unifLists*[V, F](
   elems1, elems2: seq[Term[V, F]],
   env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
+  ## Unifty two lists of terms. Each list may contain variables,
+  ## constants, other terms and patterns. Pattern matches multiple
+  ## elements at once, so unification of `[@a & @a]` and `[1, 2]` will
+  ## give `{@a -> [1, 2]}`
   mixin exprRepr
   plog:
     echoi level, elems1.exprRepr(), "=", elems2.exprRepr()
-
 
   var
     tmpRes = env
@@ -1350,7 +1353,7 @@ func unifLists*[V, F](
     plog:
       echoi level, &"[{idx1}] :: [{idx2}]"
     if (ek1, ek2) == (tkPattern, tkPattern):
-      raiseAssert("#[ IMPLEMENT pattern-pattern match ]#")
+      raiseAssert("#[ IMPLEMENT:ERROR pattern-pattern match ]#")
     elif ek1 == tkPattern: # Unifty list part with pattern
       let (resenv, pos) = partialMatch(
         elems2, idx2, el1.getPatt(), tmpRes, level + 1)
@@ -1398,6 +1401,9 @@ func unifLists*[V, F](
 func unifFunctorHeads*[V, F](
   term1, term2: Term[V, F],
   env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
+  ## Unify two functor heads. Unification of two functors with
+  ## predicates is not allowed, everything else is supported. If
+  ## functor head uses variable it MUST be bound to functor constant.
   assert term1.tkind == tkFunctor and term2.tkind == tkFunctor
   let noRes = none(TermEnv[V, F])
 
@@ -1429,7 +1435,8 @@ func unifFunctorHeads*[V, F](
 
             if not deref.isFunctor:
               raiseAssert(msgjoin(
-                "Variable", varstr, "is bound to non-functor value"))
+                "Variable", varstr, "is bound to non-functor value",
+                "- cannot substitute it into functor head"))
 
             fsym = deref.fsym
             (predc, deref)
@@ -1510,6 +1517,9 @@ func unifFunctorHeads*[V, F](
 func unifConstants*[V, F](
   const1, const2: Term[V, F],
   env: TermEnv[V, F], level: int): Option[TermEnv[V, F]] =
+  ## Unify two constants. Unification of two constants with predicates
+  ## is not allowed. If one of the constants is a predicate, other
+  ## MUST be bound to non-functor value.
   assert const1.tkind == tkConstant and const2.tkind == tkConstant
   let noRes = none(TermEnv[V, F])
 
@@ -1521,7 +1531,11 @@ func unifConstants*[V, F](
         if const1.isPredicate: (const1, const2) else: (const2, const1)
 
       if val.isFunctor:
-        raiseAssert("Cannot unify functor constant with other predicate")
+        raiseAssert(msgjoin(
+          "Cannot unify functor constant with other predicate.",
+          "Attempt to unify (1) constant with predicate and (2)",
+          "value of functor kind"
+        ))
       else:
         if predc.constPred(val.value):
           result = some(env)
@@ -1534,7 +1548,11 @@ func unifConstants*[V, F](
           return noRes
   else:
     if const1.isFunctor != const2.isFunctor:
-      raiseAssert("Cannot compare functor constant with value")
+      raiseAssert(msgjoin(
+        "Cannot compare functor constant with value.",
+        "One of the constants containts functor value,",
+        "while other does not."
+      ))
     else:
       if const1.isFunctor:
         if const1.fsym == const2.fsym:
@@ -1596,9 +1614,12 @@ func unif*[V, F](
       # result = some(bindTerm(val2, val1, env))
     elif (k1, k2) in @[(tkConstant, tkFunctor), (tkFunctor, tkConstant)]:
       result = none(TermEnv[V, F])
-    elif k1 in {tkList, tkPattern}:
-      assert (k1, k2) != (tkPattern, tkPattern), "Cannot unify two patterns"
-      assert k2 in {tkList, tkPattern}, &"Cannot unify list with {k2}"
+    elif k1 in {tkList, tkPattern}: # list | pattern
+      assert (k1, k2) != (tkPattern, tkPattern), # pattern & pattern - die
+         "Cannot unify two patterns. Terms has kind 'tkPattern'"
+      assert k2 in {tkList, tkPattern},
+         &"Cannot unify list with {k2} only " &
+           "pattern-list unification is supported"
       if (k1, k2) == (tkList, tkList): # list-list unification
         result = unifLists(
           val1.getElements(), val2.getElements(), env, level + 1)
@@ -1737,11 +1758,24 @@ func mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =
 
 func appendOrUnif*[V, F](env: var TermEnv[V, F],
                          vsym: VarSym, value: Term[V, F]): bool =
+  ## If variable `vsym` is missing from the environment add it and
+  ## return true. If variable is a list `@a` append value and return
+  ## true. Otherwise return result of unification for variable value.
+  ## Environment `env` is **modified** on success.
+  ##
+  ## NOTE: in this case list variables behave almost like placeholders
+  ## - unification always succeds.
+  ##
+  ## - `{} + ($a, 12) ==> {$a -> 12}, true`
+  ## - `{@a -> [12]} + (@a, 19) ==> {@a -> [12, 19]}, true`
+  ## - `{$a -> 12} + ($a, 12) => {$a -> 12}, true`
+  ## - `{$a -> 12} + ($a, 19) => {$a -> 12}, false`
   if vsym in env:
     if vsym.isList:
       env[vsym].addElement value
       return true
     else:
+      # REVIEW pass `env` instead of making new environment
       return unif(env[vsym], value, makeEnvironment[V, F](), 0).isSome()
   else:
     if vsym.isList:
