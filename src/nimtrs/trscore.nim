@@ -93,18 +93,18 @@ type
     case tkind*: TermKind
       of tkFunctor:
         case headKind*: FuncHeadKind:
-          of fhkValue:
+          of fhkValue: ## functor symbols - constant
             functor: F
-          of fhkPredicate:
+          of fhkPredicate: ## Functor head predicate
             funcPred: proc(fhead: F): bool {.noSideEffect.}
             funcPredRepr*: string
             case bindHead: bool
               of true:
-                headVar: VarSym
+                headVar: VarSym ## Functor head variable
               of false:
                 discard
           of fhkVariable:
-            funcVariable: VarSym
+            funcVariable: VarSym ## Functor head variable
 
         arguments: SingleIt[Term[V, F]]
       of tkConstant:
@@ -557,7 +557,7 @@ func getArguments*[V, F](t: Term[V, F]): seq[Term[V, F]] =
   t.arguments.getIt().elements
 
 func getArgumentList*[V, F](t: Term[V, F]): Term[V, F] =
-  ## Get functor arguments as a term
+  ## Get functor arguments as a single list term.
   assert t.getKind() == tkFunctor
   t.arguments.getIt()
 

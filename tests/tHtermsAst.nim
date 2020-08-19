@@ -94,3 +94,31 @@ suite "Hterms ast rewriting":
       mkCond(mkCall("&", mkLit(100)))
     do:
       mkCall("&", mkLit(100))
+
+  test "Pattern matching; negation":
+    ## Capture all arguments
+    # TODO IMPLEMENT
+    when false:
+      transformTest do:
+        Condition(Call(
+          *(!%!mkLit(100) & @a) & !%!mkLit(100) & *_
+        )) => Call(@b)
+      do:
+        mkCond(mkCall(mkLit(12), mkLit(1223), mkLit(100), mkLit(99)))
+      do:
+        mkCond(mkCall(mkLit(12), mkLit(1223)))
+
+
+  test "Pattern matching; interpolation of the arguments":
+    # TODO IMPLEMENT
+    let
+      funcHead = akCall
+      replaceVal = mkLit(2 + 4 #[ some crazy computations to get the vale]#)
+
+    when false:
+      transformTest do:
+        Condition(Call(`mkLit(100)`)) => `funcHead`(`replaceVal`)
+      do:
+        mkCond(mkCall(mkLit(100)))
+      do:
+        mkCond(mkCall(replaceVal))
