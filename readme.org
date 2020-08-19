@@ -112,7 +112,7 @@ There are two types of variables - *scalar* and *list*.
   succedes/. List variable is always bound to list term but spliced
   into arguments on ~fromTerm~ conversion.
 
-#+begin_src nim
+#+begin_src nim :exports both
   echo "--- Single use of scalar variable ---"
   exUnif(ex(Condition($a)), ex(Condition(%!mkLit("hello"))))
 
@@ -217,9 +217,9 @@ that will be used on conversion from/to term.
 This 'implementation' is passed to ~toTerm~ and ~fromTerm~ converters
 to convert value of type ~V~ to ~Term[V, F]~.
 
-** Pattern matching
+** Regex-like pattern matching (~TermPattern~)
 
-#+begin_src nim
+#+begin_src nim :exports both
   import nimtrs/[trscore, trspprint, trsdsl, nimast_trs]
   import options
 
@@ -280,7 +280,7 @@ Generate term with variables and then substitute them from
 environment. Examples of use (pretty simple but should illustrate the
 point).
 
-#+begin_src nim
+#+begin_src nim :exports both
   import nimtrs/[trscore, trspprint, trsdsl, nimast_trs]
     # import options
 
@@ -307,8 +307,46 @@ point).
 : if 1 + 2:
 :   hello
 
-** Rewriting
+** Rewriting TODO:DOC
 
+** Term construction DSL
+
+Pattern matching DSL is intentionally similar to EBNF grammar from
+[[https://github.com/haxscramper/hparse#dsl-syntax][hparse dsl]]. Of course there are differences, but I tried to keep them
+as close as possible.
+
+- functor construction
+  - ~Functor(a1, a2 ...)~ make functor with arguments ~a1, a2~. Argment
+    might be a pattern.
+  - ~
+
+
+** Error reporting in DSL
+
+This library uses [[https://github.com/haxscramper/hmisc#hmischexceptions][hmisc/hexceptions]] for DSL error reporting.
+
+#+begin_src nim :exports both
+discard initTRS(astImpl):
+  Condition($a, 0) => Condition($a, $b)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Undeclared variable $b
+
+ 2    discard initTRS(astImpl):
+ 5:36   Condition($a, 0) => Condition($a, $b)
+                                          ^~
+                                          |
+                                          Not declared in LHS
+
+
+
+Raised in :0
+
+
+ [CodeError:ObjectType]
+#+end_example
 
 * Development
 
