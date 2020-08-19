@@ -78,3 +78,22 @@ suite "DSL":
     ifTest:
       if 20 == 29:
         echo "123"
+
+  test "Ast templating":
+    template makeNimTerm(body: untyped): untyped =
+      makeTerm(nimAstImpl, body)
+
+    macro templating(arg: untyped): untyped =
+      let env = makeEnvironment(@{
+        parseVarSym("$a") : arg.toTerm()
+      })
+
+      let templ = makeNimTerm:
+        IfStmt(
+          ElifBranch($a, %!ident("hello"))
+        )
+
+      let res = templ.substitute(env).fromTerm()
+      echo res.toStrLit()
+
+    templating(1 + 2)

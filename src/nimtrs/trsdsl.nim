@@ -339,6 +339,44 @@ func parseTermPattern(body: NimNode, conf: GenParams): (NimNode, VarTable) =
   let impl = parseTermPattern(body, conf, false, vtable)
   return (impl, vtable)
 
+func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
+  assertNodeIt(
+      node,
+      (node.kind == nnkSym and
+       node.getTypeInst().kind == nnkBracketExpr and
+       node.getTypeInst()[0].strVal() == stype.head),
+      msgjoin(
+        "Expected variable of type `", stype, "` but found '",
+        node.toStrLit().strVal().toYellow(), "' of type",
+        node.getTypeInst().toStrLit().strVal().toYellow()
+    ))
+
+
+
+func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
+  impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
+  # assertNodeIt(
+  #   fPrefix,
+  #   fPrefix.kind in {nnkStrLit, nnkIdent},
+  #   "Expected string literal or ident for functor prefix")
+
+  let implType = impl.getTypeInst()
+  # debugecho implType.treeRepr()
+  result = GenParams(
+     vName: implType[1].mkNType(),
+     fName: implType[2].mkNType(),
+     fPrefix: fPrefix,
+     implId: impl.strVal()
+   )
+
+
+
+
+macro makeTerm*[V, F](impl: TermImpl[V, F], patt: untyped): untyped =
+  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+  let (matcher, vars) =  parseTermPattern(patt, conf)
+  return matcher
+
 func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
   # TODO: generate static assertion for match arms to have the same
   # result type. IDEA: Rewrite let side in form of `let res = <expr>;
@@ -370,34 +408,6 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
 
   # echov result.toStrLit()
 
-
-func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
-  assertNodeIt(
-      node,
-      (node.kind == nnkSym and
-       node.getTypeInst().kind == nnkBracketExpr and
-       node.getTypeInst()[0].strVal() == stype.head),
-      msgjoin(
-        "Expected variable of type `", stype, "` but found '",
-        node.toStrLit().strVal().toYellow(), "' of type",
-        node.getTypeInst().toStrLit().strVal().toYellow()
-    ))
-
-func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
-  impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
-  # assertNodeIt(
-  #   fPrefix,
-  #   fPrefix.kind in {nnkStrLit, nnkIdent},
-  #   "Expected string literal or ident for functor prefix")
-
-  let implType = impl.getTypeInst()
-  # debugecho implType.treeRepr()
-  result = GenParams(
-     vName: implType[1].mkNType(),
-     fName: implType[2].mkNType(),
-     fPrefix: fPrefix,
-     implId: impl.strVal()
-   )
 
 macro initTRS*(impl: typed, body: untyped): untyped =
   result = initTRSImpl(makeGenParams(

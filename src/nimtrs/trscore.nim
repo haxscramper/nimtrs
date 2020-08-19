@@ -1705,9 +1705,7 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
 func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F]
 func substElements*[V, F](
   args: seq[Term[V, F]], env: TermEnv[V, F]): seq[Term[V, F]] =
-  # var args: seq[Term[V, F]]
   for arg in args:
-    # echov arg.exprRepr()
     if arg.listvarp(): # Always splice list variables
       for value in env[arg].getElements():
         result.add value.substitute(env)
@@ -1716,7 +1714,6 @@ func substElements*[V, F](
 
 func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
   ## Substitute all variables in term with their values from environment
-  mixin exprRepr
   case term.getKind():
     of tkConstant:
       return term
@@ -1731,9 +1728,7 @@ func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
         of fhkValue:
           return makeFunctor(
             term.getFSym(),
-            term.getArguments().substElements(env)
-            # .mapIt(substitute(it, env))
-          )
+            term.getArguments().substElements(env))
         of fhkPredicate:
           raiseAssert("Cannot subsitute head for functor with predicate")
         of fhkVariable:
@@ -1750,16 +1745,9 @@ func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
     of tkPlaceholder:
       return term
     of tkList:
-      return makeList(term.getElements().substElements(env)
-      # .mapIt(substitute(it, env))
-      )
+      return makeList(term.getElements().substElements(env))
     of tkPattern:
       raiseAssert("#[ Cannot subsitute value into from pattern ]#")
-
-
-  for (v, path) in term.varlist():
-    if env.isBound(getVName(v)):
-      result.setAtPath(path, v.dereference(env))
 
 func mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =
   for vsym, value in other:

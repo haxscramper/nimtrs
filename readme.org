@@ -94,6 +94,10 @@ to convert value of type ~V~ to ~Term[V, F]~.
 
 *** Variables
 
+List variables are always spliced. In most cases notion of 'list' is
+not present in AST - things like ~StmtList~ is just another functor
+(with many arguments, yes, but functor still).
+
 *** Environment
 
 *** Unification
@@ -120,14 +124,15 @@ to convert value of type ~V~ to ~Term[V, F]~.
       # |      ||  Concatenation of two parts Optional artument in the term
       # v_____ vv_________                  v v
         IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
-        #      A           ^       ^      A         ^^^^^^^^^
+        #      A           ^       ^      A         ^‾‾‾‾‾‾‾‾‾‾
         #      !           |_______|      !         Possible nullable variable,
         #      !           |              !         inserted as `seq[F]`
         #      !           |              !
         #      !           Two list variables, will be inserted as `seq[V]`
+        #      !                          !
         #      [ This part will consume as]
-        #      [ as much functor arguments]
-        #      [ as possible.             ]
+        #      [ much functor arguments as]
+        #      [ possible.                ]
 
         for cond in conds:
           echo cond.lispRepr()
