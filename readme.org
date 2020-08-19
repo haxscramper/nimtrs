@@ -1,15 +1,33 @@
 #+title: nimtrs
+#+property: header-args:nim+ :flags -d:plainStdout --cc:tcc --hints:off
+#+property: header-args:nim+ :import nimtrs/doc_example
 
 Ast pattern matching, templating and rewriting. Supports regex-like
 patterns for sequences. Is not tied to particular AST - ~NimNode~ is
 supported, but *not the only* type of AST.
 
+This library is intended to be used not only as pattern matching for
+nim ast but also as foundation for any sort of operations on
+heterogenous AST trees. At least I hope it to be suitable for this
+kind of task.
+
+The readme might be a little too verbose (especially for the people
+who are familliar with prolog/unification etc).
+
+
 * Features
+
+
+# Documentation todo
+# - [ ] *MUST* document all dsl elements
 
 ** Core concepts
 
 This library is build around prolog-like unification algorithm and
 term notion. This terminology is used in documentation/API etc.
+
+Code examples use either ~NimAst~ (where appropriate) or simple type
+~Ast~, defined in tests [[file:tests/ast_term.nim]].
 
 *** ~Term~
 
@@ -29,10 +47,13 @@ parameters: ~V~ and ~F~. First one (~V~ )is a *type of constants*
 
 # ~sin($a + $b)~ can be rewritten into  = (sin($a) * cos($b)) + (cos($a) * sin($b))~
 
+# ~+~ in nim code it would be ~func `+`(a, b: int): int~
+
+
 - If you want to model mathematical expressions ~F~ would be a string
   and ~V~ in integer type. Possible example of a functor: ~cos(0.2)~
   or ~sin($a + $b)~. Note: ~+~ is also a functor - binary operator is
-  just a 2-ary function. # in nim code it would be ~func `+`(a, b: int): int~
+  just a 2-ary function.
 - For working with nim ast functor head is a ~NimNodeKind~ and
   constant is a ~NimNode~. For example for expression like ~3 + 3~ we
   get ast dump (in lisp form) that looks like this. ~Infix~ is a
@@ -42,6 +63,104 @@ parameters: ~V~ and ~F~. First one (~V~ )is a *type of constants*
     (Infix (Ident "+") (IntLit 3) (IntLit 3))
   #+end_src
 
+Simple example of AST node type
+#+begin_src nim
+type
+  AstKind* = enum
+    # Constant values
+    akStrLit
+    akIntLit
+    akIdent
+
+    # Functors
+    akCall
+    akCondition
+
+  Ast* = object
+    case kind: AstKind
+      of akStrLit, akIdent:
+        strVal: string
+      of akIntLit:
+        intVal: int
+      else:
+        subnodes: seq[Ast]
+#+end_src
+
+*** Unification
+
+Unification is an algorithm for finding /substitution/ (mapping of
+variables to values).
+
+Signature for unfication is: ~(t1, t2: Term[V, F], env: TermEnv[V,
+F]): Option[TermEnv[V, F]]~. Given some environment ~env~ and two
+terms ~t1~, ~t2~ /try/ to find all necessary substitutions for which
+
+
+*** Variables & environment
+
+Each variable represented using symbol (~VarSym~) and itself does not
+have any value. Environment is a *mapping* (substitution) between
+variable symbols and terms.
+
+There are two types of variables - *scalar* and *list*.
+- *Scalar variable* (denoted using ~$varName~) is identical regular
+  prolog variable and quite similar to ~let~ variable in nim - once
+  assigned value cannot be changed, unification of two bound variables
+  succesed only if their values can be unified.
+- *List variable* was introduces to allow capturing multiple values
+  from term. Unification with this type of variables /always
+  succedes/. List variable is always bound to list term but spliced
+  into arguments on ~fromTerm~ conversion.
+
+#+begin_src nim
+  echo "--- Single use of scalar variable ---"
+  exUnif(ex(Condition($a)), ex(Condition(%!mkLit("hello"))))
+
+  echo "--- Scalar variable used twice ---"
+  exUnif(
+    ex(Condition($a, $a)),
+    ex(Condition(%!mkLit("vareee"), %!mkLit("vareee")))
+  )
+
+  echo "--- Scalar variable used twice, different arguments ---"
+  exUnif(
+    ex(Condition($a, $a)),
+    ex(Condition(
+      %!mkLit("vareee"), # different values for constants. Variable will
+      # be unified with first one `"vareee"`, but fails on second one.
+      %!mkLit("((((()))))")
+    ))
+  )
+
+
+  echo "--- List variable ---"
+  exUnif(
+    ex(Condition(@a, @a)), # List variable captures all terms
+    ex(Condition(%!mkLit("vareee"), %!mkLit("((((()))))")))
+  )
+#+end_src
+
+#+RESULTS:
+: --- Single use of scalar variable ---
+: {($a -> 'hello')}
+: --- Scalar variable used twice ---
+: {($a -> 'vareee')}
+: --- Scalar variable used twice, different arguments ---
+: Unification failed
+: --- List variable ---
+: {(@a -> ['vareee', '((((()))))'])}
+
+# right now support for ~var -> var~ unification is supported /in
+# theory/ but not really tested. I used ~env[]~ for getting values
+# from environment quite extensively and ~dereference~ only in couple
+# of places.
+
+List variables are always spliced. In most cases notion of 'list' is
+not present in AST - things like ~StmtList~ is just another functor
+(with many arguments, yes, but functor still). This is not supported
+right now, but using something like ~A([@listVariable])~ to *really*
+generate list will be added.
+
 *** ~TermImpl~
 
 Terms are build as /heterogenous/ representation for trees - there is
@@ -49,10 +168,13 @@ only single type for functor head, but since constants themself can
 differ (~(IntLit 3)~ and ~(Ident "+")~) it is necessary to distinguish
 between them somehow.
 
-One possible soltion is to take OOP-style approach and model term as a
-object hierarchy, with each one implementing some kind of ~isConstant~
-and ~getFunctorSymbol~ methods. This library uses somewhat similar
-approach, but more suitable for nim case objects.
+One possible solution is to take OOP-style approach and model term as
+a object hierarchy, with each one implementing some kind of
+~isConstant~ and ~getFunctorSymbol~ methods. This library uses
+somewhat similar approach, but more suitable for nim case objects.
+Instead of deriving from parent object type and implementing some
+abstract methods it is necessarty to declare set of callback functions
+that will be used on conversion from/to term.
 
 #+caption: TermImpl for nim node
 #+begin_src nim
@@ -94,16 +216,6 @@ approach, but more suitable for nim case objects.
 
 This 'implementation' is passed to ~toTerm~ and ~fromTerm~ converters
 to convert value of type ~V~ to ~Term[V, F]~.
-
-*** Variables
-
-List variables are always spliced. In most cases notion of 'list' is
-not present in AST - things like ~StmtList~ is just another functor
-(with many arguments, yes, but functor still).
-
-*** Environment
-
-*** Unification
 
 ** Pattern matching
 
@@ -206,3 +318,24 @@ Some things are informally described in [[file:devnotes.org]], most of the
 functions and types are documented in the source code. If you have any
 additional questions feel free to join my [[https://discord.gg/ZnBB4E][discord server]] and ask
 questions there.
+
+** TODO
+
+- [ ] support ~`functor`(`value`)~ to interpolate
+  variables/expressions from surrounding environment (similar to
+  ~quote do:~)
+
+** COMMENT misc
+
+#+begin_src nim
+  dumpTree:
+    `ee`(`eee`)
+#+end_src
+
+#+RESULTS:
+: StmtList
+:   Call
+:     AccQuoted
+:       Ident "ee"
+:     AccQuoted
+:       Ident "eee"

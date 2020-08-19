@@ -623,6 +623,7 @@ func treeRepr*[V, F](val: V, cb: TermImpl[V, F], depth: int = 0): string =
       .split("\n").mapIt(ind & "cst " & it).join("\n")
 
 func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
+  let color = not defined(plainStdout)
   case term.getKind():
     of tkPattern:
       term.getPatt().exprRepr(cb)
@@ -630,7 +631,7 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
       "[" & getElements(term).mapIt(exprRepr(it, cb)).join(", ") & "]"
     of tkConstant:
       if term.predp():
-        "%?".toMagenta() & term.constPredRepr
+        "%?".toMagenta(color) & term.constPredRepr
       else:
         if term.functorvalp():
           $term.getFSym()
@@ -655,11 +656,11 @@ func exprRepr*[V, F](term: Term[V, F], cb: TermImpl[V, F]): string =
               else: args
 
         of fhkPredicate:
-          "%?".toMagenta() & term.funcPredRepr &
+          "%?".toMagenta(color) & term.funcPredRepr &
             term.bindvarp().tern(&"[{term.getVname().exprRepr()}]", "") &
             args
         of fhkVariable:
-          &"[{term.getVName().exprRepr().toYellow()}]({args})"
+          &"[{term.getVName().exprRepr().toYellow(color)}]({args})"
 
     of tkPlaceholder:
       "_"
@@ -909,7 +910,7 @@ func setSubpatterns*[V, F](
   matcher.subpatts = subpatts
   matcher.varlist.incl getExportedVars(matcher)
   matcher.varlist.incl getExportedVars(subpatts)
-  matcher.optVars = optVars.toSet()
+  matcher.optVars = optVars.toHashSet()
 
 func makeMatcher*[V, F](
   matcher: MatchProc[V, F],
