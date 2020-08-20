@@ -1,3 +1,4 @@
+# WIP
 import sugar, strutils, sequtils, strformat, options
 import nimtrs/[trscore, trspprint, trsdsl, parsetree_trs]
 import hparse, hparse/llstar_gen

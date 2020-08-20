@@ -167,12 +167,11 @@ suite "Nim trs primitives":
 
   test "{fromTerm} exception":
     try:
-      discard nOp(nOp(nVar("ii"))).fromTerm()
+      discard nOp(nOp(nVar("$ii"))).fromTerm()
       fail()
-    except GenException[SubstitutionErrorInfo]:
-      let e = getGEx[SubstitutionErrorInfo]
-      assertEq e.info.path, @[0, 0, 0]
-      assertEq e.info.vname, "ii"
+    except AssertionError:
+      assert getCurrentExceptionMsg().startsWith(
+        "Cannot convert under-substituted term back")
 
   test "{unif} term unification tests":
      block:
@@ -321,8 +320,6 @@ suite "Pattern matching":
       echo res["ii"].exprRepr()
       cmpTerm res["ii"], nConst(1)
 
-  # if true: quit 0
-
   test "Test proc test":
     unifTest(
       @[ 1, 1 ],
@@ -361,8 +358,6 @@ suite "Pattern matching":
         "z" : nConst(2)
       }
     )
-
-  # if true: quit 0
 
   test "Zero-or-more pattern":
     unifTest(
@@ -595,11 +590,11 @@ suite "Nim trs reduction rule search":
 
     assertEq sys.exprRepr(),
         """
-        0: tmkF('10', _ii)      ~~> tmkF(_ii)
-        1: tmkF('90', _ii, _uu) ~~> tmkF(_uu, _ee)
-           uu: tmkF('20', _ee)
-           ii: tmkF('10', _zz)
-        2: tmkF('120', _qq)     ~~> '90'""".dedent()
+        0: tmkF('10', $ii)      ~~> tmkF($ii)
+        1: tmkF('90', $ii, $uu) ~~> tmkF($uu, $ee)
+           $ii: tmkF('10', $zz)
+           $uu: tmkF('20', $ee)
+        2: tmkF('120', $qq)     ~~> '90'""".dedent()
 
     block:
       # Test rewrite for last rule.
@@ -617,8 +612,8 @@ suite "Nim trs reduction rule search":
     block:
       let redex = nT(
         nT(90),
-        nT(nT(10), nT(666)), # `ii: tmkF('10', _zz)`
-        nT(nT(20), nT(777))  # `uu: tmkF('20', _ee)`
+        nT(nT(10), nT(666)), # `ii: tmkF('10', $zz)`
+        nT(nT(20), nT(777))  # `uu: tmkF('20', $ee)`
       ).toTerm()
 
       block:
@@ -636,10 +631,10 @@ suite "Nim trs reduction rule search":
             assertEq env.exprRepr(),
               """
               {
-                _zz -> '666'
-                _uu -> tmkF('20', '777')
-                _ii -> tmkF('10', '666')
-                _ee -> '777'
+                $ii -> tmkF('10', '666')
+                $ee -> '777'
+                $zz -> '666'
+                $uu -> tmkF('20', '777')
               }""".dedent
 
 

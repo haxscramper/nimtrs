@@ -19,7 +19,8 @@ who are familliar with prolog/unification etc).
 
 
 # Documentation todo
-# - [ ] *MUST* document all dsl elements
+# - [X] *MUST* document all dsl elements
+# - [ ] better explanation for unification
 
 ** Core concepts
 
@@ -252,7 +253,7 @@ to convert value of type ~V~ to ~Term[V, F]~.
         IfStmt(*ElifBranch(@conds, @bodies) & ?Else($elsebody))):
         #      A           ^       ^      A         ^‾‾‾‾‾‾‾‾‾‾
         #      !           |_______|      !         Possible nullable variable,
-        #      !           |              !         inserted as `seq[F]`
+        #      !           |              !         inserted as `Option[F]`
         #      !           |              !
         #      !           Two list variables, will be inserted as `seq[V]`
         #      !                          !

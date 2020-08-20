@@ -16,20 +16,20 @@ import hmisc/macros/[iflet, cl_logic]
 import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
 import hmisc/[helpers, hexceptions]
 
-type
-  InfoException = ref object of CatchableError
+# type
+#   InfoException = ref object of CatchableError
 
-  GenException*[T] = ref object of InfoException
-    info*: T
+#   GenException*[T] = ref object of InfoException
+#     info*: T
 
 
-proc raiseGenEx[T](msg: string, info: T): void =
-  var tmp = new GenException[T]
-  tmp.msg = msg & " [generic exception, T is `" & $typeof(T) & "`]"
-  tmp.info = info
-  raise tmp
+# proc raiseGenEx[T](msg: string, info: T): void =
+#   var tmp = new GenException[T]
+#   tmp.msg = msg & " [generic exception, T is `" & $typeof(T) & "`]"
+#   tmp.info = info
+#   raise tmp
 
-template getGEx*[T](): untyped = cast[GenException[T]](getCurrentException())
+# template getGEx*[T](): untyped = cast[GenException[T]](getCurrentException())
 
 type
   SingleIt*[T] = object

@@ -18,4 +18,5 @@ proc exUnif*(term1, term2: AstTerm): void =
   else:
     echo "Unification failed"
 
-exUnif(ex(Condition($a)), ex(Condition(%!mkLit("hello"))))
+when isMainModule:
+  exUnif(ex(Condition($a)), ex(Condition(%!mkLit("hello"))))
