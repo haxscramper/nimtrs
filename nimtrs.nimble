@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.2.12"
 author        = "haxscramper"
 description   = "Nim term rewriting system"
 license       = "Apache-2.0"
