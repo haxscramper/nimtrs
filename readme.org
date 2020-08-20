@@ -8,11 +8,11 @@ supported, but *not the only* type of AST.
 
 This library is intended to be used not only as pattern matching for
 nim ast but also as foundation for any sort of operations on
-heterogenous AST trees. At least I hope it to be suitable for this
+heterogeneous AST trees. At least I hope it to be suitable for this
 kind of task.
 
 The readme might be a little too verbose (especially for the people
-who are familliar with prolog/unification etc).
+who are familiar with prolog/unification etc).
 
 
 * Features
@@ -175,7 +175,7 @@ generate list will be added.
 
 *** ~TermImpl~
 
-Terms are build as /heterogenous/ representation for trees - there is
+Terms are build as /heterogeneous/ representation for trees - there is
 only single type for functor head, but since constants themself can
 differ (~(IntLit 3)~ and ~(Ident "+")~) it is necessary to distinguish
 between them somehow.
@@ -361,7 +361,7 @@ syntax), but it works /in general/ (passes test suite at least).
 
 - [1] alternative is not actually supported right now as it requires
   *much* more more work than any other pattern. Reason? supporting
-  alternative will require to implement large portion of prolog
+  alternative will require implementing large portion of prolog
   backtracking system to keep track of variables bound in each
   alternative. Why? consider this pattern: ~($a | (1 & $a)) & $a~
   unified with list ~[1, 2, 2]~. If we select first alternative we get
