@@ -1,7 +1,7 @@
 import macros, strformat, sets, sugar, strutils, sequtils
 import trscore
 import hmisc/[hexceptions, helpers]
-import hmisc/types/[colorstring, initcalls]
+import hmisc/types/[colorstring, initcalls, hnim_ast]
 
 # TODO validate functor conststruction by checking number of arguments
 # (and possibly their types (it is possible /technically/))
@@ -10,6 +10,7 @@ type
   GenParams = object
     vName, fName: NType
     fPrefix, termId, implId: string
+    fNames: seq[seq[string]]
     nodecl: bool
 
   VarSpec = object
@@ -91,6 +92,31 @@ template mapItInfix*(topInfix: NimNode, op: untyped): untyped =
 
   res
 
+func makeFunctorIdent(node: NimNode, conf: GenParams): string =
+  let id = node.strVal()
+  if id[0].isLowerAscii():
+    # TODO genrate list of possible functor heads (from enum
+    # implementation) and compare to used identifier.
+    if not id.startsWith(conf.fPrefix):
+      raiseCodeError(
+        node,
+        "Functor identifer must either be " &
+          "uppercase or start with functor prefix",
+        &"Expected prefix {conf.fPrefix}")
+
+  let match = id.splitCamel().abbrevCamel(conf.fNames)
+  if match.len == 0:
+    # TODO generate list of closes matches for functor names
+    raiseCodeError(node, id & " does not match any functor name", id)
+  elif match.len == 1:
+    result = conf.fPrefix & match[0]
+  else:
+    raiseCodeError(
+      node, id & " is an ambiguous abbreviation",
+      "Possible expansions: " & match.joinq()
+    )
+
+
 func parseTermPattern(
   body: NimNode, conf: GenParams,
   nullable: bool, vtable: var VarTable): NimNode =
@@ -102,17 +128,6 @@ func parseTermPattern(
     of nnkCall:
       case body[0].kind:
         of nnkIdent:
-          let id = body[0].strVal()
-          if id[0].isLowerAscii():
-            # TODO genrate list of possible functor heads (from enum
-            # implementation) and compare to used identifier.
-            if not id.startsWith(conf.fPrefix):
-              raiseCodeError(
-                body[0],
-                "Functor identifer must either be " &
-                  "uppercase or start with functor prefix",
-                &"Expected prefix {conf.fPrefix}")
-
           let args = collect(newSeq):
             for arg in body[1..^1]:
               parseTermPattern(arg, conf, nullable, vtable)
@@ -121,7 +136,7 @@ func parseTermPattern(
           # implementation considers substituted term a functor. TODO
           # - disable this check in non-debug build.
           result = mkCallNode("makeFunctor", @[
-            ident(conf.fPrefix & id)] &
+            ident(body[0].makeFunctorIdent(conf))] &
               args.mapIt(newCall("makePattern", it)), @[vType, fType])
 
 
@@ -353,18 +368,20 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
 
 
 
-func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
+func makeGenParams*(impl: NimNode): GenParams =
   impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
-  # assertNodeIt(
-  #   fPrefix,
-  #   fPrefix.kind in {nnkStrLit, nnkIdent},
-  #   "Expected string literal or ident for functor prefix")
+  let
+    implType = impl.getTypeInst()
+    fEnum = implType[2]
 
-  let implType = impl.getTypeInst()
-  # debugecho implType.treeRepr()
+  let
+    fPrefix = fEnum.getEnumPref()
+    fNames = fEnum.getEnumNames().mapIt(it.dropPrefix(fPrefix))
+
   result = GenParams(
      vName: implType[1].mkNType(),
      fName: implType[2].mkNType(),
+     fNames: fNames.mapIt(it.splitCamel()),
      fPrefix: fPrefix,
      implId: impl.strVal()
    )
@@ -373,7 +390,7 @@ func makeGenParams*(fPrefix: string, impl: NimNode): GenParams =
 
 
 macro makeTerm*[V, F](impl: TermImpl[V, F], patt: untyped): untyped =
-  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+  let conf = makeGenParams(impl)
   let (matcher, vars) =  parseTermPattern(patt, conf)
   return matcher
 
@@ -410,8 +427,7 @@ func initTRSImpl*(conf: GenParams, body: NimNode): NimNode =
 
 
 macro initTRS*(impl: typed, body: untyped): untyped =
-  result = initTRSImpl(makeGenParams(
-    impl.getTypeInst()[2].getEnumPref(), impl) , body)
+  result = initTRSImpl(makeGenParams(impl) , body)
 
 func discardStmtList*(body: NimNode): NimNode =
   if body.kind == nnkStmtList and body[0].kind == nnkStmtList:
@@ -420,7 +436,7 @@ func discardStmtList*(body: NimNode): NimNode =
     body
 
 macro makeMatchTerm*[V, F](impl: TermImpl[V, F], patt: untyped): untyped =
-  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+  let conf = makeGenParams(impl)
   let (matcher, vars) =  parseTermPattern(patt, conf)
   return matcher
 
@@ -430,9 +446,9 @@ macro matchWith*[V, F](
     block:
       let fType = impl.getTypeInst()[2]
       if fType.isEnum():
-        makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+        makeGenParams(impl)
       else:
-        makeGenParams("", impl)
+        makeGenParams(impl)
 
   let
     termType = term.getTypeInst()
@@ -474,7 +490,7 @@ macro matchWith*[V, F](
 
 macro matchPattern*[V, F](
   term: Term[V, F], impl: TermImpl[V, F], patt: untyped): untyped =
-  let conf = makeGenParams(impl.getTypeInst()[2].getEnumPref(), impl)
+  let conf = makeGenParams(impl)
   let (patt, vars) = patt.parseTermPattern(conf)
   let unifcall = newCall("unifp", term, patt)
   var
@@ -528,8 +544,6 @@ macro matchPattern*[V, F](
         true
       else:
         false
-
-    # echo result.toStrLit()
 
 macro matchPattern*[V, F](
   term: V, impl: TermImpl[V, F], patt: untyped): untyped =

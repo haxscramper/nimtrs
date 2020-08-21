@@ -15,12 +15,12 @@ template transformTest*(body: untyped, termIn, termOut: typed): untyped =
   let termRes = matchWith(termIn1, astImpl):
     body
 
-  echo "input___: ", termIn1.exprRepr(astImpl)
-  echo "expected: ", termOut.toTerm(astImpl).exprRepr(astImpl)
   if termRes.isSome():
     let res = termRes.get().fromTerm(astImpl)
     cmpTerm res, termOut
   else:
+    echo "input___: ", termIn1.exprRepr(astImpl)
+    echo "expected: ", termOut.toTerm(astImpl).exprRepr(astImpl)
     fail("Rewrite is none")
 
 
@@ -122,3 +122,35 @@ suite "Hterms ast rewriting":
         mkCond(mkCall(mkLit(100)))
       do:
         mkCond(mkCall(replaceVal))
+
+  test "Term construction; abbreviations":
+    block:
+      let term = astImpl.makeTerm:
+        Cond(%!mkIdent("=="))
+
+    when false: # ambiguous abbreviation error test
+      block:
+        let term = astImpL.makeTerm:
+          Lit()
+
+    when false:
+      block:
+        let term = astImpL.makeTerm:
+          C(%!mkIdent("=="))
+
+    when false: # no matches test error
+      block:
+        let term = astImpL.makeTerm:
+          C0000(%!mkIdent("=="))
+
+    when false: # IMPLEMENT
+      block:
+        let term = impl.makeTerm:
+          Cond(Ident(`"==="`), Int(`11`), Int(`22`))
+
+          # Pass string primitive type literals (strings, integers,
+          # floats, bools etc) as-is, without requiring quioting.
+          # Require user to implement `fromBasicType` callback in form
+          # `(val: PrimitiveType): Term[V, F]` where `PrimitiveType` is
+          # a case obejct for all 'passthrough' types.
+          Cond(Ident("=="), Int(12), Int(22))
