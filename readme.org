@@ -404,10 +404,11 @@ Raised in :0
 
 # TODO build documentation and upload it on github-pages.
 
-Some things are informally described in [[file:devnotes.org]], most of the
-functions and types are documented in the source code. If you have any
-additional questions feel free to join my [[https://discord.gg/ZnBB4E][discord server]] and ask
-questions there.
+Some things are informally described in [[file:devnotes.org]], most of
+the functions and types are documented in the source code. If you have
+any additional questions feel free to join my
+[[https://discord.gg/hjfYJCU][discord server]] and ask questions
+there.
 
 ** TODO
 
