@@ -422,6 +422,16 @@ there.
 - [ ] Debugging (pretty printing or something similar (simple
   pretty-printing is not going to cut it for large terms. Need good
   tool for visualizing and debugging failed unification)).
+- [ ] Pass string primitive type literals (strings, integers, floats,
+  bools etc) as-is, without requiring quioting. Require user to
+  implement ~fromBasicType~ callback in form ~(val: PrimitiveType):
+  Term[V, F]~ where ~PrimitiveType~ is a case object for all
+  'passthrough' types.
+
+
+** TODO:DOC
+
+- [ ] functor abbreviation in DSL
 
 ** COMMENT misc
 

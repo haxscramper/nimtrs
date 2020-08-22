@@ -1,7 +1,7 @@
 import macros, strformat, sets, sugar, strutils, sequtils
 import trscore
 import hmisc/[hexceptions, helpers]
-import hmisc/types/[colorstring, initcalls, hnim_ast]
+import hmisc/types/[colorstring, hnim_ast]
 
 # TODO validate functor conststruction by checking number of arguments
 # (and possibly their types (it is possible /technically/))
@@ -104,7 +104,7 @@ func makeFunctorIdent(node: NimNode, conf: GenParams): string =
           "uppercase or start with functor prefix",
         &"Expected prefix {conf.fPrefix}")
 
-  let match = id.splitCamel().abbrevCamel(conf.fNames)
+  let match = id.splitCamel().abbrevCamel(conf.fNames, getExact = true)
   if match.len == 0:
     # TODO generate list of closes matches for functor names
     raiseCodeError(node, id & " does not match any functor name", id)

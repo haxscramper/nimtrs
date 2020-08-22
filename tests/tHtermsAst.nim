@@ -95,9 +95,8 @@ suite "Hterms ast rewriting":
     do:
       mkCall("&", mkLit(100))
 
-  test "Pattern matching; negation":
+  test "\e[31mIMPLEMENT\e[39m Pattern matching; negation":
     ## Capture all arguments
-    # TODO IMPLEMENT
     when false:
       transformTest do:
         Condition(Call(
@@ -109,8 +108,7 @@ suite "Hterms ast rewriting":
         mkCond(mkCall(mkLit(12), mkLit(1223)))
 
 
-  test "Pattern matching; interpolation of the arguments":
-    # TODO IMPLEMENT
+  test "\e[31mIMPLEMENT\e[39m `interpolation` of the arguments":
     let
       funcHead = akCall
       replaceVal = mkLit(2 + 4 #[ some crazy computations to get the vale]#)
@@ -123,7 +121,7 @@ suite "Hterms ast rewriting":
       do:
         mkCond(mkCall(replaceVal))
 
-  test "Term construction; abbreviations":
+  test "\e[31mIMPLEMENT\e[39m Term construction; abbreviations":
     block:
       let term = astImpl.makeTerm:
         Cond(%!mkIdent("=="))
@@ -143,14 +141,10 @@ suite "Hterms ast rewriting":
         let term = astImpL.makeTerm:
           C0000(%!mkIdent("=="))
 
-    when false: # IMPLEMENT
+  test "\e[31mIMPLEMENT\e[39m functor construnction from primitive literals":
+    when false:
       block:
         let term = impl.makeTerm:
           Cond(Ident(`"==="`), Int(`11`), Int(`22`))
 
-          # Pass string primitive type literals (strings, integers,
-          # floats, bools etc) as-is, without requiring quioting.
-          # Require user to implement `fromBasicType` callback in form
-          # `(val: PrimitiveType): Term[V, F]` where `PrimitiveType` is
-          # a case obejct for all 'passthrough' types.
           Cond(Ident("=="), Int(12), Int(22))
