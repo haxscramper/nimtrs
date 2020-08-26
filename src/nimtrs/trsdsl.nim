@@ -1,14 +1,15 @@
 import macros, strformat, sets, sugar, strutils, sequtils
 import trscore
 import hmisc/[hexceptions, helpers]
-import hmisc/types/[colorstring, hnim_ast]
+import hmisc/types/colorstring
+import hnimast
 
 # TODO validate functor conststruction by checking number of arguments
 # (and possibly their types (it is possible /technically/))
 
 type
   GenParams = object
-    vName, fName: NType
+    vName, fName: NType[NimNode]
     fPrefix, termId, implId: string
     fNames: seq[seq[string]]
     nodecl: bool

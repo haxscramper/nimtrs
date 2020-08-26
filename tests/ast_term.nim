@@ -1,8 +1,9 @@
 import hmisc/helpers
+import hnimast
 import nimtrs/[trscore, trspprint, trsdsl]
 import sequtils, strformat, strutils, macros
 import hmisc/algo/halgorithm
-import hmisc/types/[hnim_ast, colorstring]
+import hmisc/types/colorstring
 import unittest, sets, options
 
 import hpprint, hpprint/hpprint_repr
