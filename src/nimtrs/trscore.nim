@@ -362,7 +362,7 @@ func makeFunctor*[V, F](
     headKind: fhkValue,
     tkind: tkFunctor,
     functor: sym,
-    arguments: makeList(subt).mkIt())
+    arguments: makeList(subt).newIt())
 
 func makeFunctor*[V, F](
   headvar: VarSym, subt: seq[Term[V, F]]): Term[V, F] =
@@ -370,7 +370,7 @@ func makeFunctor*[V, F](
     headKind: fhkVariable,
     tkind: tkFunctor,
     funcVariable: headvar,
-    arguments: makeList(subt).mkIt())
+    arguments: makeList(subt).newIt())
 
 func makeFunctor*[V, F](
   funcPred: proc(fhead: F): bool {.noSideEffect.},
@@ -382,12 +382,15 @@ func makeFunctor*[V, F](
     headKind: fhkPredicate,
     tkind: tkFunctor,
     bindHead: false,
-    arguments: makeList(subt).mkIt())
+    arguments: makeList(subt).newIt())
 
 func makeFunctor*[V, F](
   funcPred: proc(fhead: F): bool {.noSideEffect.},
   funcPredRepr: string,
   headVar: VarSym, subt: seq[Term[V, F]]): Term[V, F] =
+  ## Create predicate functor with head binding to variable
+  ## `predVar`
+  # TODO:DOC what is `funcPredVar`
   Term[V, F](
     funcPred: funcPred,
     headKind: fhkPredicate,
@@ -395,9 +398,10 @@ func makeFunctor*[V, F](
     tkind: tkFunctor,
     bindHead: true,
     headVar: headVar,
-    arguments: makeList(subt).mkIt())
+    arguments: makeList(subt).newIt())
 
 func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
+  ## Create functor using `sym` as functor head and `subt` as arguments.
   makeFunctor(sym, toSeq(subt))
 
 
@@ -406,9 +410,11 @@ func makeFunctor*[V, F](sym: F, subt: varargs[Term[V, F]]): Term[V, F] =
 #===========================  Making patterns  ===========================#
 
 func makeTermP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkTerm, term: mkIt(patt))
+  ## Convert term to pattern matching this term
+  TermPattern[V, F](kind: tpkTerm, term: newIt(patt))
 
 func makeAndP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
+  ## Create 'and' pattern from sequence of patterns: `E1 & E2 &E3 ...`
   TermPattern[V, F](kind: tpkConcat, patterns: patts)
 
 # func makeAndP*[V, F](
@@ -417,31 +423,41 @@ func makeAndP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
 
 func makeAndP*[V, F](
   patts: varargs[TermPattern[V, F], makeTermP]): TermPattern[V, F] =
+  ## Create 'and' pattern from all arguments: `E1 & E2 & E3`
   TermPattern[V, F](kind: tpkConcat, patterns: toSeq(patts))
 
 func makeOrP*[V, F](patts: seq[TermPattern[V, F]]): TermPattern[V, F] =
+  ## Create 'or' pattern from all arguments: `E1 | E2 | E2`
   TermPattern[V, F](kind: tpkAlternative, patterns: patts)
 
 func makeOptP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt))
+  ## Create optional pattern from argument: `?E`
+  TermPattern[V, F](kind: tpkOptional, patt: newIt(patt))
 
 func makeOptP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkOptional, patt: mkIt(patt.makeTermP()))
+  ## Create optional pattern from term argument: `?T`
+  TermPattern[V, F](kind: tpkOptional, patt: newIt(patt.makeTermP()))
 
 func makeZeroOrMoreP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt))
+  ## Create zero-or-more pattern from argument: `*E`
+  TermPattern[V, F](kind: tpkZeroOrMore, patt: newIt(patt))
 
 func makeZeroOrMoreP*[V, F](patt: Term[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkZeroOrMore, patt: mkIt(patt.makeTermP()))
+  ## Create zero-or-more patern from term argument: `*T`
+  TermPattern[V, F](kind: tpkZeroOrMore, patt: newIt(patt.makeTermP()))
 
 func makeNegationP*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
-  TermPattern[V, F](kind: tpkNegation, patt: mkIt(patt))
+  ## Create negation patter from term: `!E`
+  TermPattern[V, F](kind: tpkNegation, patt: newIt(patt))
 
 
 func makeTermPattern*[V, F](patt: TermPattern[V, F]): TermPattern[V, F] =
+  ## Convert term pattern to term pattern (used to simplify DSL)
   patt
 
 func makeTermPattern*[V, F](patt: Term[V, F]): TermPattern[V, F] =
+  ## Convert term term to term pattern. Used in DSL - in regular code
+  ## you might want to use `makeTermP`
   patt.makeTermP()
 
 #============================  Aux functions  ============================#
@@ -1288,7 +1304,7 @@ func unif*[V, F](elems: seq[Term[V, F]],
                  level: int,
                  fullMatch: bool = true): Option[TermEnv[V, F]] =
   ## Unify `patt` to elements in `elems` using environment `env`. If
-  ## `fullMatch` is true return `some() `environment only if input
+  ## `fullMatch` is true return `some()` environment only if input
   ## sequence matcher completely. Otherwise repeatedly apply pattern
   ## on sequence.
   if fullMatch:

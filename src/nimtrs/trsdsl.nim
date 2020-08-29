@@ -136,7 +136,7 @@ func parseTermPattern(
           # TODO add runtime assert with `CodeError` to check if
           # implementation considers substituted term a functor. TODO
           # - disable this check in non-debug build.
-          result = mkCallNode("makeFunctor", @[
+          result = newCallNode("makeFunctor", @[
             ident(body[0].makeFunctorIdent(conf))] &
               args.mapIt(newCall("makePattern", it)), @[vType, fType])
 
@@ -150,7 +150,7 @@ func parseTermPattern(
 
           # debugecho vsym
 
-          result = mkCallNode(
+          result = newCallNode(
             "makeFunctor", [vType, fType],
             @[
               makeInitAllFields(vsym),
@@ -160,13 +160,13 @@ func parseTermPattern(
             ]
           )
         of nnkStrLit:
-          result = mkCallNode(
+          result = newCallNode(
             # dotHead = (ident conf.implId),
             name = "makeFunctor",
             # gentypes = [vType, fType],
             args = @[body[0],
               body[1..^1].mapIt(
-                it.parseTermPattern(conf, nullable, vtable).mkCallNode(
+                it.parseTermPattern(conf, nullable, vtable).newCallNode(
                   "makePattern")
               ).toBracketSeq()
             ])
@@ -183,14 +183,14 @@ func parseTermPattern(
     of nnkIdent:
       let str = body.strVal()
       if str == "_":
-        result = mkCallNode("makePlaceholder", [vType, fType])
+        result = newCallNode("makePlaceholder", [vType, fType])
       else:
         raiseCodeError(
           body, "Lowercase identifier without prefix used as variable",
           &"Use `${str}` scalar or `@{str}` for list variable")
 
         # let vsym = parseVarSym(str)
-        # result = mkCallNode("makeVariable", [vType, fType],
+        # result = newCallNode("makeVariable", [vType, fType],
         #                        makeInitAllFields(vsym))
 
         # if conf.nodecl:
@@ -203,7 +203,7 @@ func parseTermPattern(
         of "$", "@":
           let vsym = makeVarSym(
             body[1].strVal(), islist = (body[0].strval() == "@"))
-          result = mkCallNode(
+          result = newCallNode(
             "makeVariable", [vType, fType], makeInitAllFields(vsym))
 
           if conf.nodecl:
@@ -229,13 +229,13 @@ func parseTermPattern(
               of "!": "makeNegationP"
               else: "<<<INVALID_PREFIX>>>"
 
-          result = mkCallNode(callname, @[result])
+          result = newCallNode(callname, @[result])
         of "*@":
           let vsym = makeVarSym(body[1].strVal(), islist = true)
 
           # TODO REFACTOR
-          result = mkCallNode("makeZeroOrMoreP", @[
-            mkCallNode("makeVariable", [vType, fType],
+          result = newCallNode("makeZeroOrMoreP", @[
+            newCallNode("makeVariable", [vType, fType],
                        makeInitAllFields(vsym))])
 
           if conf.nodecl:
@@ -269,13 +269,13 @@ func parseTermPattern(
                 vtable.addvar(vsym, varspec)
 
               let valcall = newCall(brac[0], body[1][1..^1])
-              result = mkCallNode(
+              result = newCallNode(
                 "makeConstant",
                 [vType, fType],
                 @[
                   valcall,
                   # newCall("toTerm", valcall, ident conf.implId),
-                  (ident conf.implId).mkCallNode("getSym", @[ valcall ]),
+                  (ident conf.implId).newCallNode("getSym", @[ valcall ]),
                   makeInitAllFields(vsym),
                 ]
               )
@@ -306,7 +306,7 @@ func parseTermPattern(
                 ]
               )
             of nnkIdent:
-              result = mkCallNode(
+              result = newCallNode(
                 "makeConstant", [vType, fType],
                 @[ predc, predc.toStrLit() ]
               )
@@ -315,7 +315,7 @@ func parseTermPattern(
         else:
           raiseCodeError(body[0], &"Unexpected prefix '{prefstr.toYellow()}'")
     of nnkIntLit:
-      result = mkCallNode("toTerm", @[body, ident(conf.implId)])
+      result = newCallNode("toTerm", @[body, ident(conf.implId)])
     of nnkInfix:
       case body[0].strVal():
         of "&", "|":
@@ -328,7 +328,7 @@ func parseTermPattern(
               of "|": "makeOrP"
               else: "<<<INVALID_PREFIX>>>"
 
-          result = mkCallNode(callname, @[ elems.mapIt(
+          result = newCallNode(callname, @[ elems.mapIt(
             newCall("makeTermPattern", it)).toBracketSeq() ])
     of nnkStmtList:
       return parseTermPattern(body[0], conf, nullable, vtable)
@@ -370,7 +370,7 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
 
 
 func makeGenParams*(impl: NimNode): GenParams =
-  impl.expectNode(nnkSym, mkNType("TermImpl", @["V", "F"]))
+  impl.expectNode(nnkSym, newNType("TermImpl", @["V", "F"]))
   let
     implType = impl.getTypeInst()
     fEnum = implType[2]
@@ -380,8 +380,8 @@ func makeGenParams*(impl: NimNode): GenParams =
     fNames = fEnum.getEnumNames().mapIt(it.dropPrefix(fPrefix))
 
   result = GenParams(
-     vName: implType[1].mkNType(),
-     fName: implType[2].mkNType(),
+     vName: implType[1].newNType(),
+     fName: implType[2].newNType(),
      fNames: fNames.mapIt(it.splitCamel()),
      fPrefix: fPrefix,
      implId: impl.strVal()
