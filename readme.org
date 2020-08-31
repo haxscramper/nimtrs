@@ -14,6 +14,19 @@ kind of task.
 The readme might be a little too verbose (especially for the people
 who are familiar with prolog/unification etc).
 
+** Installation
+
+#+begin_src bash
+nimble install nimtrs
+#+end_src
+
+** Links
+
+- [[https://github.com/haxscramper/nimtrs][github]]
+- [[https://haxscramper.github.io/nimtrs-doc/src/nimtrs/trscore.html][core API documentation]]
+- [[https://discord.gg/hjfYJCU][discord server]]
+- [[https://nimble.directory/pkg/nimtrs][nimble package]]
+
 
 * Features
 
