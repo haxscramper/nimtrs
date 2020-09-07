@@ -1,4 +1,4 @@
-import macros, strformat, sets, sugar, strutils, sequtils
+import macros, strformat, sets, sugar, strutils, sequtils, options
 import trscore
 import hmisc/[hexceptions, helpers]
 import hmisc/types/colorstring
@@ -362,7 +362,7 @@ func expectNode*(node: NimNode, kind: NimNodeKind, stype: NType): void =
        node.getTypeInst().kind == nnkBracketExpr and
        node.getTypeInst()[0].strVal() == stype.head),
       msgjoin(
-        "Expected variable of type `", stype, "` but found '",
+        "Expected variable of type `", $stype, "` but found '",
         node.toStrLit().strVal().toYellow(), "' of type",
         node.getTypeInst().toStrLit().strVal().toYellow()
     ))
