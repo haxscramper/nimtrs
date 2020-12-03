@@ -1902,7 +1902,7 @@ template reductionTriggersBFS*[V, F](
 
   var rs = ReductionState()
   iterateItBFS(redex, it.getArguments(), it.getKind() == tkFunctor):
-    let rule = system.findApplicable(it, rs, emptyTreePath)
+    let rule = system.findApplicable(it, rs, rootTreePath)
     if rule.isSome():
       let (ruleId {.inject.}, env {.inject.}, rulePair {.inject.}) = rule.get()
       block:
@@ -1913,8 +1913,9 @@ template reductionTriggersDFS*[V, F](
   redex: Term[V, F], system: RedSystem[V, F], body: untyped): untyped =
 
   var rs = ReductionState()
-  iterateItDFS(redex, it.getArguments(), it.getKind() == tkFunctor):
-    let rule = system.findApplicable(it, rs, emptyTreePath)
+  iterateItDFS(redex, it.getArguments(),
+               it.getKind() == tkFunctor, dfsPreorder):
+    let rule = system.findApplicable(it, rs, rootTreePath)
     if rule.isSome():
       let (ruleId {.inject.}, env {.inject.}, rulePair {.inject.}) = rule.get()
       block:
