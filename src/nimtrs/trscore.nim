@@ -1,21 +1,21 @@
 ## Term algorithms. Implmenetation uses callback functions for getting
 ## values/types from terms.
 
-import hashes, sequtils, tables, strformat, strutils, sugar, macros
-import hmisc/types/[seq2d, colorstring]
-import hmisc/helpers
-export colorstring
+import std/[
+  options, deques, intsets, sets, hashes, sequtils,
+  tables, strformat, strutils, sugar, macros
+]
 
-import hdrawing, hdrawing/term_buf
-import options
-import deques, intsets, sets
 export tables, intsets
 
-import hmisc/types/[htrie, hprimitives]
-import hmisc/macros/[iflet, cl_logic]
-import hmisc/algo/[halgorithm, hseq_mapping, htree_mapping]
-import hmisc/[helpers, hexceptions]
+import
+  hmisc/extra/hdrawing/[term_buf],
+  hmisc/types/[seq2d, colorstring, htrie, hprimitives],
+  hmisc/macros/[iflet, cl_logic],
+  hmisc/algo/[halgorithm, hseq_mapping, htree_mapping],
+  hmisc/[helpers, hexceptions]
 
+export colorstring
 # type
 #   InfoException = ref object of CatchableError
 
@@ -1582,6 +1582,10 @@ func unif*[V, F](
   ## Attempt to unify two terms. On success substitution (environment)
   ## is return for which two terms `t1` and `t2` could be considered
   ## equal.
+  ##
+  ## - TODO :: Add overload with optional mutable argument for storing
+  ##   unification trace in - useful for debugging and general execution
+  ##   logging.
   mixin exprRepr
   plog:
     echoi level, t1.exprRepr(), t2.exprRepr()
@@ -1625,8 +1629,11 @@ func unif*[V, F](
     elif (k1, k2) in @[(tkConstant, tkFunctor), (tkFunctor, tkConstant)]:
       result = none(TermEnv[V, F])
     elif k1 in {tkList, tkPattern}: # list | pattern
+      # REFACTOR use `UnificationError` exception instead of just `assert`
       assert (k1, k2) != (tkPattern, tkPattern), # pattern & pattern - die
          "Cannot unify two patterns. Terms has kind 'tkPattern'"
+
+      # REFACTOR `UnificationError`
       assert k2 in {tkList, tkPattern},
          &"Cannot unify list with {k2} only " &
            "pattern-list unification is supported"
@@ -1644,6 +1651,7 @@ func unif*[V, F](
     else:
       if (k1 == tkFunctor) and (k2 != tkFunctor) or
          (k2 == tkFunctor) and (k1 != tkFunctor):
+        # REFACTOR `UnificationError`
         raiseAssert(msgjoin(
           "Cannot unify functor and non-functor directly. K1 is ", k1,
           " and K2 is ", k2))
@@ -1701,10 +1709,12 @@ proc setAtPath*[V, F](term: var Term[V, F], path: TreePath, value: Term[V, F]): 
           path = path[1 .. ^1],
           value = value)
     of tkPattern:
+      # REFACTOR `UnificationError`
       raiseAssert("Cannot set value at path *inside* pattern")
     of tkVariable:
       term = value
     of tkPlaceholder:
+      # REFACTOR `UnificationError`
       assert false, "Cannot assign to placeholder: " & $term & " = " & $value
     of tkConstant:
       term = value
@@ -1755,6 +1765,7 @@ func substitute*[V, F](term: Term[V, F], env: TermEnv[V, F]): Term[V, F] =
     of tkList:
       return makeList(term.getElements().substElements(env))
     of tkPattern:
+      # REFACTOR `SubstitutaionError`
       raiseAssert("#[ Cannot subsitute value into from pattern ]#")
 
 func mergeEnv*[V, F](env: var TermEnv[V, F], other: TermEnv[V, F]): void =

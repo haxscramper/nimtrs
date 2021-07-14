@@ -109,8 +109,10 @@ func makeFunctorIdent(node: NimNode, conf: GenParams): string =
   if match.len == 0:
     # TODO generate list of closes matches for functor names
     raiseCodeError(node, id & " does not match any functor name", id)
+
   elif match.len == 1:
     result = conf.fPrefix & match[0]
+
   else:
     raiseCodeError(
       node, id & " is an ambiguous abbreviation",
